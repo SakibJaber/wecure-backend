@@ -1,0 +1,35 @@
+import { Module } from '@nestjs/common';
+import { AppController } from 'src/app.controller';
+import { AppService } from 'src/app.service';
+import { AppointmentsModule } from 'src/modules/appointments/appointments.module';
+import { AuthModule } from 'src/modules/auth/auth.module';
+import { AvailabilityModule } from 'src/modules/availability/availability.module';
+import { ChatModule } from 'src/modules/chat/chat.module';
+import { DoctorsModule } from 'src/modules/doctors/doctors.module';
+import { UsersModule } from 'src/modules/users/users.module';
+import { ReviewsModule } from './reviews/reviews.module';
+import { PaymentsModule } from './payments/payments.module';
+import { DonationsModule } from './donations/donations.module';
+import { WellnessTipsModule } from './wellness-tips/wellness-tips.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { SpecialistModule } from './specialist/specialist.module';
+
+@Module({
+  imports: [
+    AuthModule,
+    UsersModule,
+    DoctorsModule,
+    AvailabilityModule,
+    AppointmentsModule,
+    ChatModule,
+    ReviewsModule,
+    PaymentsModule,
+    DonationsModule,
+    WellnessTipsModule,
+    AuditLogsModule,
+    SpecialistModule,
+  ],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class DomainModule {}
