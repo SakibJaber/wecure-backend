@@ -2,13 +2,12 @@ import {
   IsEmail,
   IsEnum,
   IsNotEmpty,
-  IsOptional,
   MinLength,
   ValidateIf,
 } from 'class-validator';
 import { Role } from 'src/common/enum/role.enum';
 
-export class RegisterDto {
+export class SendRegistrationOtpDto {
   @IsNotEmpty()
   name: string;
 

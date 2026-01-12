@@ -31,9 +31,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found');
     }
 
+    // Check if user is logged in (has a refresh token)
+    if (!user.refreshToken) {
+      throw new UnauthorizedException('Session expired or logged out');
+    }
+
     // Check user status with specific error messages
     switch (user.status) {
-      case UserStatus.APPROVED:
+      case UserStatus.ACTIVE:
         return {
           userId: payload.userId,
           email: payload.email,

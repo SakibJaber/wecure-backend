@@ -16,10 +16,25 @@ export class UploadsController {
       folder: 'appointments' | 'verifications';
     },
   ) {
-    return this.uploadsService.generateUploadUrl(
-      body.mimeType,
-      body.folder,
-    );
+    try {
+      const result = await this.uploadsService.generateUploadUrl(
+        body.mimeType,
+        body.folder,
+      );
+      return {
+        success: true,
+        statusCode: 201,
+        message: 'Presigned URL generated successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to generate presigned URL',
+        data: null,
+      };
+    }
   }
 
   /**
@@ -27,8 +42,21 @@ export class UploadsController {
    */
   @Get('view')
   async getPresignedViewUrl(@Query('key') key: string) {
-    return {
-      url: await this.uploadsService.generateViewUrl(key),
-    };
+    try {
+      const url = await this.uploadsService.generateViewUrl(key);
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'File view URL generated successfully',
+        data: { url },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to generate file view URL',
+        data: null,
+      };
+    }
   }
 }

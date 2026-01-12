@@ -1,9 +1,4 @@
-import {
-  Controller,
-  Get,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AuditLogsService } from './audit-logs.service';
 // import { Roles } from '../../common/decorators/roles.decorator';
 // import { RolesGuard } from '../../common/guards/roles.guard';
@@ -13,9 +8,7 @@ import { AuditLogsService } from './audit-logs.service';
 // @UseGuards(JwtAuthGuard, RolesGuard)
 // @Roles('ADMIN')
 export class AuditLogsController {
-  constructor(
-    private readonly auditLogsService: AuditLogsService,
-  ) {}
+  constructor(private readonly auditLogsService: AuditLogsService) {}
 
   /**
    * Get audit logs (paginated & filterable)
@@ -29,13 +22,33 @@ export class AuditLogsController {
     @Query('page') page = 1,
     @Query('limit') limit = 20,
   ) {
-    return this.auditLogsService.findAll({
-      userId,
-      action,
-      from,
-      to,
-      page: Number(page),
-      limit: Number(limit),
-    });
+    try {
+      const result = await this.auditLogsService.findAll({
+        userId,
+        action,
+        from,
+        to,
+        page: Number(page),
+        limit: Number(limit),
+      });
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Audit logs fetched successfully',
+        data: result.data,
+        meta: {
+          total: result.total,
+          page: result.page,
+          limit: result.limit,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to fetch audit logs',
+        data: null,
+      };
+    }
   }
 }

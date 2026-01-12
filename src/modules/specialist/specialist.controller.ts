@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { SpecialistService } from './specialist.service';
 import { CreateSpecialistDto } from './dto/create-specialist.dto';
 import { UpdateSpecialistDto } from './dto/update-specialist.dto';
@@ -8,27 +16,108 @@ export class SpecialistController {
   constructor(private readonly specialistService: SpecialistService) {}
 
   @Post()
-  create(@Body() createSpecialistDto: CreateSpecialistDto) {
-    return this.specialistService.create(createSpecialistDto);
+  async create(@Body() createSpecialistDto: CreateSpecialistDto) {
+    try {
+      const result = await this.specialistService.create(createSpecialistDto);
+      return {
+        success: true,
+        statusCode: 201,
+        message: 'Specialist created successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to create specialist',
+        data: null,
+      };
+    }
   }
 
   @Get()
-  findAll() {
-    return this.specialistService.findAll();
+  async findAll() {
+    try {
+      const result = await this.specialistService.findAll();
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Specialists fetched successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to fetch specialists',
+        data: null,
+      };
+    }
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.specialistService.findOne(+id);
+  async findOne(@Param('id') id: string) {
+    try {
+      const result = await this.specialistService.findOne(+id);
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Specialist fetched successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to fetch specialist',
+        data: null,
+      };
+    }
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateSpecialistDto: UpdateSpecialistDto) {
-    return this.specialistService.update(+id, updateSpecialistDto);
+  async update(
+    @Param('id') id: string,
+    @Body() updateSpecialistDto: UpdateSpecialistDto,
+  ) {
+    try {
+      const result = await this.specialistService.update(
+        +id,
+        updateSpecialistDto,
+      );
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Specialist updated successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to update specialist',
+        data: null,
+      };
+    }
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.specialistService.remove(+id);
+  async remove(@Param('id') id: string) {
+    try {
+      const result = await this.specialistService.remove(+id);
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Specialist deleted successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to delete specialist',
+        data: null,
+      };
+    }
   }
 }

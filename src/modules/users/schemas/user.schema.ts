@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { Role } from 'src/common/enum/role.enum';
+import { UserStatus } from 'src/common/enum/user.status.enum';
 
 export type UserDocument = User & Document;
 
@@ -21,8 +22,29 @@ export class User {
   @Prop({ required: true })
   password: string;
 
-  @Prop({ default: 'ACTIVE' })
+  @Prop({ unique: true, sparse: true })
+  doctorId?: string;
+
+  @Prop()
+  refreshToken?: string;
+
+  @Prop({ default: UserStatus.ACTIVE, enum: UserStatus })
   status: string;
+
+  @Prop()
+  emailVerificationOtp?: string;
+
+  @Prop()
+  emailVerificationOtpExpires?: Date;
+
+  @Prop()
+  passwordResetOtp?: string;
+
+  @Prop()
+  passwordResetOtpExpires?: Date;
+
+  @Prop({ default: false })
+  isEmailVerified: boolean;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

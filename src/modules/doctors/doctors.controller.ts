@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { DoctorsService } from './doctors.service';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
@@ -8,27 +16,105 @@ export class DoctorsController {
   constructor(private readonly doctorsService: DoctorsService) {}
 
   @Post()
-  create(@Body() createDoctorDto: CreateDoctorDto) {
-    return this.doctorsService.create(createDoctorDto);
+  async create(@Body() createDoctorDto: CreateDoctorDto) {
+    try {
+      const result = await this.doctorsService.create(createDoctorDto);
+      return {
+        success: true,
+        statusCode: 201,
+        message: 'Doctor created successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to create doctor',
+        data: null,
+      };
+    }
   }
 
   @Get()
-  findAll() {
-    return this.doctorsService.findAll();
+  async findAll() {
+    try {
+      const result = await this.doctorsService.findAll();
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Doctors fetched successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to fetch doctors',
+        data: null,
+      };
+    }
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.doctorsService.findOne(+id);
+  async findOne(@Param('id') id: string) {
+    try {
+      const result = await this.doctorsService.findOne(+id);
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Doctor fetched successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to fetch doctor',
+        data: null,
+      };
+    }
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateDoctorDto: UpdateDoctorDto) {
-    return this.doctorsService.update(+id, updateDoctorDto);
+  async update(
+    @Param('id') id: string,
+    @Body() updateDoctorDto: UpdateDoctorDto,
+  ) {
+    try {
+      const result = await this.doctorsService.update(+id, updateDoctorDto);
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Doctor updated successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to update doctor',
+        data: null,
+      };
+    }
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.doctorsService.remove(+id);
+  async remove(@Param('id') id: string) {
+    try {
+      const result = await this.doctorsService.remove(+id);
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Doctor deleted successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to delete doctor',
+        data: null,
+      };
+    }
   }
 }
