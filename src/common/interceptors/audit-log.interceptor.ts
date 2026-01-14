@@ -19,9 +19,13 @@ export class AuditLogInterceptor implements NestInterceptor {
     const user = request['user']; // set by auth guard
     const method = request.method;
     const path = request.route?.path || request.url;
-    const ip =
+    let ip =
       request.headers['x-forwarded-for']?.toString() ||
       request.socket.remoteAddress;
+
+    if (ip === '::1') {
+      ip = '127.0.0.1';
+    }
 
     // Sanitize body to remove sensitive fields like password
     const sanitizedBody = { ...request.body };

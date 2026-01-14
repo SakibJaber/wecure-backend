@@ -6,15 +6,47 @@ import {
   Patch,
   Param,
   Delete,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import { WellnessTipsService } from './wellness-tips.service';
 import { CreateWellnessTipDto } from './dto/create-wellness-tip.dto';
 import { UpdateWellnessTipDto } from './dto/update-wellness-tip.dto';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/common/guards/roles.guard';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { Role } from 'src/common/enum/role.enum';
 
 @Controller('wellness-tips')
 export class WellnessTipsController {
   constructor(private readonly wellnessTipsService: WellnessTipsService) {}
 
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/like')
+  async toggleLike(@Param('id') id: string, @Req() req) {
+    try {
+      const result = await this.wellnessTipsService.toggleLike(
+        id,
+        req.user.userId,
+      );
+      return {
+        success: true,
+        statusCode: 200,
+        message: result.liked ? 'Tip liked' : 'Tip unliked',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to toggle like',
+        data: null,
+      };
+    }
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Post()
   async create(@Body() createWellnessTipDto: CreateWellnessTipDto) {
     try {
@@ -59,7 +91,7 @@ export class WellnessTipsController {
   @Get(':id')
   async findOne(@Param('id') id: string) {
     try {
-      const result = await this.wellnessTipsService.findOne(+id);
+      const result = await this.wellnessTipsService.findOne(id);
       return {
         success: true,
         statusCode: 200,
@@ -76,6 +108,8 @@ export class WellnessTipsController {
     }
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Patch(':id')
   async update(
     @Param('id') id: string,
@@ -83,7 +117,7 @@ export class WellnessTipsController {
   ) {
     try {
       const result = await this.wellnessTipsService.update(
-        +id,
+        id,
         updateWellnessTipDto,
       );
       return {
@@ -102,10 +136,12 @@ export class WellnessTipsController {
     }
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Delete(':id')
   async remove(@Param('id') id: string) {
     try {
-      const result = await this.wellnessTipsService.remove(+id);
+      const result = await this.wellnessTipsService.remove(id);
       return {
         success: true,
         statusCode: 200,

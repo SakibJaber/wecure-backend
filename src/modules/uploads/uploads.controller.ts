@@ -1,7 +1,9 @@
-import { Controller, Post, Body, Get, Query } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, UseGuards } from '@nestjs/common';
 import { UploadsService } from './uploads.service';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 
 @Controller('uploads')
+// @UseGuards(JwtAuthGuard)
 export class UploadsController {
   constructor(private readonly uploadsService: UploadsService) {}
 
@@ -13,7 +15,7 @@ export class UploadsController {
     @Body()
     body: {
       mimeType: string;
-      folder: 'appointments' | 'verifications';
+      folder: 'appointments' | 'verifications' | 'profiles';
     },
   ) {
     try {

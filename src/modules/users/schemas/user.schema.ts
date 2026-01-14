@@ -45,6 +45,12 @@ export class User {
 
   @Prop({ default: false })
   isEmailVerified: boolean;
+
+  @Prop()
+  dateOfBirth?: Date;
+
+  @Prop()
+  profileImage?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

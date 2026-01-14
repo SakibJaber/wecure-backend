@@ -6,15 +6,22 @@ import {
   Patch,
   Param,
   Delete,
+  UseGuards,
 } from '@nestjs/common';
 import { SpecialistService } from './specialist.service';
 import { CreateSpecialistDto } from './dto/create-specialist.dto';
 import { UpdateSpecialistDto } from './dto/update-specialist.dto';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/common/guards/roles.guard';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { Role } from 'src/common/enum/role.enum';
 
 @Controller('specialist')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class SpecialistController {
   constructor(private readonly specialistService: SpecialistService) {}
 
+  @Roles(Role.ADMIN)
   @Post()
   async create(@Body() createSpecialistDto: CreateSpecialistDto) {
     try {
@@ -75,6 +82,7 @@ export class SpecialistController {
     }
   }
 
+  @Roles(Role.ADMIN)
   @Patch(':id')
   async update(
     @Param('id') id: string,
@@ -101,6 +109,7 @@ export class SpecialistController {
     }
   }
 
+  @Roles(Role.ADMIN)
   @Delete(':id')
   async remove(@Param('id') id: string) {
     try {

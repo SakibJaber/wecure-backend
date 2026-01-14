@@ -165,9 +165,19 @@ export class UsersService {
       .lean();
   }
 
-  async updateProfile(userId: string, data: { name?: string; phone?: string }) {
+  async updateProfile(
+    userId: string,
+    data: {
+      name?: string;
+      phone?: string;
+      dateOfBirth?: string;
+      profileImage?: string;
+    },
+  ) {
     const updates: any = {};
     if (data.name) updates.name = data.name;
+    if (data.dateOfBirth) updates.dateOfBirth = new Date(data.dateOfBirth);
+    if (data.profileImage) updates.profileImage = data.profileImage;
     if (data.phone) {
       updates.phone = this.encryptionService.encrypt(data.phone);
     }
@@ -238,18 +248,16 @@ export class UsersService {
     };
   }
 
-  async blockUser(userId: string) {
-    return this.userModel.findByIdAndUpdate(
-      userId,
-      { status: 'BLOCKED' },
-      { new: true },
-    );
-  }
+  async toggleUserStatus(userId: string) {
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new ConflictException('User not found');
+    }
 
-  async unblockUser(userId: string) {
+    const newStatus = user.status === 'BLOCKED' ? 'ACTIVE' : 'BLOCKED';
     return this.userModel.findByIdAndUpdate(
       userId,
-      { status: 'ACTIVE' },
+      { status: newStatus },
       { new: true },
     );
   }

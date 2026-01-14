@@ -13,6 +13,8 @@ import { DonationsModule } from './donations/donations.module';
 import { WellnessTipsModule } from './wellness-tips/wellness-tips.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { SpecialistModule } from './specialist/specialist.module';
+import { UploadsModule } from './uploads/uploads.module';
+import { PublicUploadModule } from 'src/modules/public-upload/public-upload.module';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { SpecialistModule } from './specialist/specialist.module';
     WellnessTipsModule,
     AuditLogsModule,
     SpecialistModule,
+    UploadsModule,
+    PublicUploadModule
   ],
   controllers: [AppController],
   providers: [AppService],

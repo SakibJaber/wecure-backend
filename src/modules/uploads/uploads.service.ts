@@ -33,7 +33,7 @@ export class UploadsService {
    */
   async generateUploadUrl(
     mimeType: string,
-    folder: 'appointments' | 'verifications',
+    folder: 'appointments' | 'verifications' | 'profiles',
   ) {
     if (!mimeType.startsWith('image/') && mimeType !== 'application/pdf') {
       throw new BadRequestException('Unsupported file type');

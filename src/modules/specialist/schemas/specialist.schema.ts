@@ -11,6 +11,9 @@ export class Specialist {
   @Prop()
   description: string;
 
+  @Prop()
+  thumbnailUrl: string;
+
   @Prop({ default: true })
   isActive: boolean;
 }

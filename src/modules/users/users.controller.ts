@@ -15,6 +15,9 @@ import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
+import { RolesGuard } from 'src/common/guards/roles.guard';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { Role } from 'src/common/enum/role.enum';
 
 @Controller('users')
 export class UsersController {
@@ -104,7 +107,8 @@ export class UsersController {
     }
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Get()
   async findAll(@Query() query) {
     try {
@@ -125,49 +129,33 @@ export class UsersController {
     }
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Patch(':id/block')
-  async blockUser(@Param('id') id: string) {
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @Patch(':id/toggle-status')
+  async toggleUserStatus(@Param('id') id: string) {
     try {
-      const user = await this.usersService.blockUser(id);
+      const user = await this.usersService.toggleUserStatus(id);
+      if (!user) {
+        throw new Error('User not found after update');
+      }
       return {
         success: true,
         statusCode: 200,
-        message: 'User blocked successfully',
+        message: `User ${user.status === 'BLOCKED' ? 'blocked' : 'unblocked'} successfully`,
         data: user,
       };
     } catch (error) {
       return {
         success: false,
         statusCode: error.status || 400,
-        message: error.message || 'Failed to block user',
+        message: error.message || 'Failed to toggle user status',
         data: null,
       };
     }
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Patch(':id/unblock')
-  async unblockUser(@Param('id') id: string) {
-    try {
-      const user = await this.usersService.unblockUser(id);
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'User unblocked successfully',
-        data: user,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to unblock user',
-        data: null,
-      };
-    }
-  }
-
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Patch(':id/role')
   async changeRole(@Param('id') id: string, @Body() dto: ChangeRoleDto) {
     try {
