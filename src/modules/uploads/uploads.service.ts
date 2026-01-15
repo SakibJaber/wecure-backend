@@ -16,21 +16,18 @@ export class UploadsService {
 
   constructor(private readonly configService: ConfigService) {
     this.s3 = new S3Client({
-      region: this.configService.get<string>('region'),
+      region: this.configService.get<string>('aws.region'),
       credentials: {
-        accessKeyId: this.configService.get<string>('accessKeyId')!,
-        secretAccessKey: this.configService.get<string>('secretAccessKey')!,
+        accessKeyId: this.configService.get<string>('aws.accessKeyId')!,
+        secretAccessKey: this.configService.get<string>('aws.secretAccessKey')!,
       },
     });
 
-    this.bucket = this.configService.get<string>('s3.bucketName')!;
+    this.bucket = this.configService.get<string>('aws.s3.bucketName')!;
     this.signedUrlExpireSeconds =
-      this.configService.get<number>('s3.signedUrlExpireSeconds') || 300;
+      this.configService.get<number>('aws.s3.signedUrlExpireSeconds') ?? 300;
   }
 
-  /**
-   * Generate presigned URL for upload
-   */
   async generateUploadUrl(
     mimeType: string,
     folder: 'appointments' | 'verifications' | 'profiles',
@@ -45,22 +42,15 @@ export class UploadsService {
       Bucket: this.bucket,
       Key: fileKey,
       ContentType: mimeType,
-      ACL: 'private',
     });
 
     const uploadUrl = await getSignedUrl(this.s3, command, {
       expiresIn: this.signedUrlExpireSeconds,
     });
 
-    return {
-      uploadUrl,
-      fileKey,
-    };
+    return { uploadUrl, fileKey };
   }
 
-  /**
-   * Generate presigned URL for download (view)
-   */
   async generateViewUrl(fileKey: string) {
     const command = new GetObjectCommand({
       Bucket: this.bucket,
@@ -70,5 +60,25 @@ export class UploadsService {
     return getSignedUrl(this.s3, command, {
       expiresIn: this.signedUrlExpireSeconds,
     });
+  }
+
+  async uploadBuffer(
+    buffer: Buffer,
+    mimeType: string,
+    folder: string,
+    originalName: string,
+  ): Promise<string> {
+    const extension = originalName.split('.').pop() || 'bin';
+    const fileKey = `${folder}/${randomUUID()}.${extension}`;
+
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: fileKey,
+      Body: buffer,
+      ContentType: mimeType,
+    });
+
+    await this.s3.send(command);
+    return fileKey;
   }
 }

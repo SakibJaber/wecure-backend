@@ -1,16 +1,4 @@
 export const UPLOAD_FOLDERS = {
-  PRODUCTS: 'products',
-  USERS: 'users',
-  REVIEWS: 'reviews',
-  ICONS: 'icons',
-  COUPONS: 'coupons',
-  BLOGS: 'blogs',
-  BANNERS: 'banners',
-  DESIGNS: 'designs',
-  SUBCATEGORIES: 'subcategories',
-  CATEGORIES: 'categories',
-  CHARTS: 'charts',
-  TESTIMONIALS: 'testimonials',
-  BRANDS: 'brands',
+  SPECIALISTS: 'specialists',
   OTHERS: 'others',
 };

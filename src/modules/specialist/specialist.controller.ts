@@ -7,6 +7,8 @@ import {
   Param,
   Delete,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { SpecialistService } from './specialist.service';
 import { CreateSpecialistDto } from './dto/create-specialist.dto';
@@ -15,6 +17,8 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { Role } from 'src/common/enum/role.enum';
+import { GlobalPublicUploadInterceptor } from '../public-upload/public-upload.interceptor';
+import { Public } from 'src/common/decorators/public.decorator';
 
 @Controller('specialist')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -23,110 +27,91 @@ export class SpecialistController {
 
   @Roles(Role.ADMIN)
   @Post()
-  async create(@Body() createSpecialistDto: CreateSpecialistDto) {
-    try {
-      const result = await this.specialistService.create(createSpecialistDto);
-      return {
-        success: true,
-        statusCode: 201,
-        message: 'Specialist created successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to create specialist',
-        data: null,
-      };
-    }
+  @UseInterceptors(
+    GlobalPublicUploadInterceptor({
+      fieldName: 'image',
+      maxCount: 1,
+      allowedMimes: /\/(jpg|jpeg|png|gif|webp)$/i,
+      maxFileSizeBytes: 5 * 1024 * 1024, // 5MB
+    }),
+  )
+  async create(
+    @Body() createSpecialistDto: CreateSpecialistDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    const result = await this.specialistService.create(
+      createSpecialistDto,
+      file,
+    );
+    return {
+      success: true,
+      statusCode: 201,
+      message: 'Specialist created successfully',
+      data: result,
+    };
   }
 
+  @Public()
   @Get()
   async findAll() {
-    try {
-      const result = await this.specialistService.findAll();
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Specialists fetched successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to fetch specialists',
-        data: null,
-      };
-    }
+    const result = await this.specialistService.findAll();
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Specialists fetched successfully',
+      data: result,
+    };
   }
 
+  @Public()
   @Get(':id')
   async findOne(@Param('id') id: string) {
-    try {
-      const result = await this.specialistService.findOne(+id);
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Specialist fetched successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to fetch specialist',
-        data: null,
-      };
-    }
+    const result = await this.specialistService.findOne(id);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Specialist fetched successfully',
+      data: result,
+    };
   }
 
   @Roles(Role.ADMIN)
   @Patch(':id')
+  @UseInterceptors(
+    GlobalPublicUploadInterceptor({
+      fieldName: 'image',
+      maxCount: 1,
+      allowedMimes: /\/(jpg|jpeg|png|gif|webp)$/i,
+      maxFileSizeBytes: 5 * 1024 * 1024, // 5MB
+    }),
+  )
   async update(
     @Param('id') id: string,
     @Body() updateSpecialistDto: UpdateSpecialistDto,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
-    try {
-      const result = await this.specialistService.update(
-        +id,
-        updateSpecialistDto,
-      );
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Specialist updated successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to update specialist',
-        data: null,
-      };
-    }
+    const result = await this.specialistService.update(
+      id,
+      updateSpecialistDto,
+      file,
+    );
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Specialist updated successfully',
+      data: result,
+    };
   }
 
   @Roles(Role.ADMIN)
   @Delete(':id')
   async remove(@Param('id') id: string) {
-    try {
-      const result = await this.specialistService.remove(+id);
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Specialist deleted successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to delete specialist',
-        data: null,
-      };
-    }
+    const result = await this.specialistService.remove(id);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Specialist deleted successfully',
+      data: result,
+    };
   }
 }

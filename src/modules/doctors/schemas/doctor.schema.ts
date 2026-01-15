@@ -23,8 +23,18 @@ export class Doctor {
   @Prop({ required: true })
   consultationFee: number;
 
+  @Prop({ type: [String], default: [] })
+  verificationDocuments: string[];
+
+  @Prop({
+    type: String,
+    enum: ['PENDING', 'VERIFIED', 'SUSPENDED'],
+    default: 'PENDING',
+  })
+  verificationStatus: string;
+
   @Prop()
-  verificationDocumentUrl: string;
+  verificationNote?: string;
 
   @Prop({ default: false })
   isVerified: boolean;

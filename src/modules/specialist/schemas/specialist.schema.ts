@@ -12,7 +12,7 @@ export class Specialist {
   description: string;
 
   @Prop()
-  thumbnailUrl: string;
+  thumbnail: string;
 
   @Prop({ default: true })
   isActive: boolean;

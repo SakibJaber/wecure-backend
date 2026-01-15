@@ -15,6 +15,7 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { SpecialistModule } from './specialist/specialist.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { PublicUploadModule } from 'src/modules/public-upload/public-upload.module';
+import { ContactSupportModule } from './contact-support/contact-support.module';
 
 @Module({
   imports: [
@@ -31,7 +32,8 @@ import { PublicUploadModule } from 'src/modules/public-upload/public-upload.modu
     AuditLogsModule,
     SpecialistModule,
     UploadsModule,
-    PublicUploadModule
+    PublicUploadModule,
+    ContactSupportModule,
   ],
   controllers: [AppController],
   providers: [AppService],

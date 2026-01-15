@@ -7,123 +7,97 @@ import {
   Param,
   Delete,
   UseGuards,
+  Req,
+  UseInterceptors,
+  UploadedFile,
+  Query,
 } from '@nestjs/common';
 import { DoctorsService } from './doctors.service';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
+import { UpdateVerificationStatusDto } from './dto/update-verification-status.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { Role } from 'src/common/enum/role.enum';
+import { GlobalPublicUploadInterceptor } from '../public-upload/public-upload.interceptor';
 
 @Controller('doctors')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DoctorsController {
   constructor(private readonly doctorsService: DoctorsService) {}
 
+  @Roles(Role.DOCTOR)
+  @Post('me/profile')
+  createProfile(@Req() req, @Body() dto) {
+    return this.doctorsService.createProfile(req.user.userId, dto);
+  }
+
+  @Get('me/profile')
+  getMyProfile(@Req() req) {
+    return this.doctorsService.getMyProfile(req.user.userId);
+  }
+
+  // Services
+  @Post('me/services')
+  addService(@Req() req, @Body() dto) {
+    return this.doctorsService.addService(req.user.userId, dto.name);
+  }
+
+  @Delete('me/services/:id')
+  removeService(@Req() req, @Param('id') id: string) {
+    return this.doctorsService.deleteService(req.user.userId, id);
+  }
+
+  // Documents
+  @Roles(Role.DOCTOR)
+  @Post('me/documents')
+  @UseInterceptors(
+    GlobalPublicUploadInterceptor({
+      fieldName: 'document',
+      maxCount: 1,
+      allowedMimes: /\/(pdf|jpg|jpeg|png)$/i,
+      maxFileSizeBytes: 10 * 1024 * 1024, // 10MB
+    }),
+  )
+  async uploadDocument(@Req() req, @UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new Error('No file uploaded');
+    }
+    return this.doctorsService.uploadVerificationDocument(
+      req.user.userId,
+      file,
+    );
+  }
+
+  // Experience
+  @Post('me/experiences')
+  addExperience(@Req() req, @Body() dto) {
+    return this.doctorsService.addExperience(req.user.userId, dto);
+  }
+
+  // Admin endpoints
   @Roles(Role.ADMIN)
-  @Post()
-  async create(@Body() createDoctorDto: CreateDoctorDto) {
-    try {
-      const result = await this.doctorsService.create(createDoctorDto);
-      return {
-        success: true,
-        statusCode: 201,
-        message: 'Doctor created successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to create doctor',
-        data: null,
-      };
-    }
-  }
-
-  @Get()
-  async findAll() {
-    try {
-      const result = await this.doctorsService.findAll();
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Doctors fetched successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to fetch doctors',
-        data: null,
-      };
-    }
-  }
-
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    try {
-      const result = await this.doctorsService.findOne(+id);
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Doctor fetched successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to fetch doctor',
-        data: null,
-      };
-    }
+  @Get('admin/all')
+  getAllDoctors(@Query() filters) {
+    return this.doctorsService.getAllDoctorsForAdmin(filters);
   }
 
   @Roles(Role.ADMIN)
-  @Patch(':id')
-  async update(
+  @Patch(':id/status')
+  updateVerificationStatus(
     @Param('id') id: string,
-    @Body() updateDoctorDto: UpdateDoctorDto,
+    @Body() dto: UpdateVerificationStatusDto,
   ) {
-    try {
-      const result = await this.doctorsService.update(+id, updateDoctorDto);
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Doctor updated successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to update doctor',
-        data: null,
-      };
-    }
+    return this.doctorsService.updateVerificationStatus(
+      id,
+      dto.status,
+      dto.note,
+    );
   }
 
-  @Roles(Role.ADMIN)
-  @Delete(':id')
-  async remove(@Param('id') id: string) {
-    try {
-      const result = await this.doctorsService.remove(+id);
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Doctor deleted successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to delete doctor',
-        data: null,
-      };
-    }
+  @Get(':id/public')
+  getPublicDoctorProfile(@Param('id') id: string) {
+    return this.doctorsService.getPublicProfile(id);
   }
 }

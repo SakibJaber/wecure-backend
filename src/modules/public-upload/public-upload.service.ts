@@ -4,8 +4,6 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as fs from 'fs/promises';
-import * as fssync from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as sharp from 'sharp';
@@ -24,18 +22,16 @@ export class PublicUploadService {
 
   constructor(private readonly config: ConfigService) {
     this.publicBaseUrl =
-      this.config.get<string>('PUBLIC_FILE_BASE_URL') ?? undefined;
+      this.config.get<string>('aws.public.baseUrl') ?? undefined;
 
     this.s3 = new S3Client({
-      region: this.config.get<string>('PUBLIC_AWS_REGION')!,
+      region: this.config.get<string>('aws.public.region')!,
       credentials: {
-        accessKeyId: this.config.get<string>('PUBLIC_AWS_ACCESS_KEY_ID')!,
-        secretAccessKey: this.config.get<string>(
-          'PUBLIC_AWS_SECRET_ACCESS_KEY',
-        )!,
+        accessKeyId: this.config.get<string>('aws.public.accessKeyId')!,
+        secretAccessKey: this.config.get<string>('aws.public.secretAccessKey')!,
       },
     });
-    this.s3Bucket = this.config.get<string>('PUBLIC_AWS_S3_BUCKET')!;
+    this.s3Bucket = this.config.get<string>('aws.public.bucketName')!;
   }
 
   /**
@@ -131,8 +127,8 @@ export class PublicUploadService {
     if (this.publicBaseUrl) {
       return `${this.publicBaseUrl.replace(/\/+$/, '')}/${key}`;
     }
-    // Default S3 URL; replace if you use a different S3 URL style or CloudFront
-    return `https://${this.s3Bucket}.s3.${this.config.get('AWS_REGION')}.amazonaws.com/${key}`;
+    const region = this.config.get<string>('aws.public.region');
+    return `https://${this.s3Bucket}.s3.${region}.amazonaws.com/${key}`;
   }
 
   private extractS3Key(input: string) {

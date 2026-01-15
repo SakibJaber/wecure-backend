@@ -1,125 +1,52 @@
 import {
   Controller,
-  Get,
   Post,
-  Body,
-  Patch,
-  Param,
+  Get,
   Delete,
+  Patch,
+  Body,
+  Param,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import { AvailabilityService } from './availability.service';
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
-import { UpdateAvailabilityDto } from './dto/update-availability.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from 'src/common/enum/role.enum';
 
-@Controller('availability')
+@Controller('doctors/me/availability')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.DOCTOR)
 export class AvailabilityController {
   constructor(private readonly availabilityService: AvailabilityService) {}
 
   @Post()
-  async create(@Body() createAvailabilityDto: CreateAvailabilityDto) {
-    try {
-      const result = await this.availabilityService.create(
-        createAvailabilityDto,
-      );
-      return {
-        success: true,
-        statusCode: 201,
-        message: 'Availability created successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to create availability',
-        data: null,
-      };
-    }
+  create(@Req() req, @Body() dto: CreateAvailabilityDto) {
+    return this.availabilityService.create(req.user.userId, dto);
   }
 
   @Get()
-  async findAll() {
-    try {
-      const result = await this.availabilityService.findAll();
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Availabilities fetched successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to fetch availabilities',
-        data: null,
-      };
-    }
-  }
-
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    try {
-      const result = await this.availabilityService.findOne(+id);
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Availability fetched successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to fetch availability',
-        data: null,
-      };
-    }
+  getMine(@Req() req) {
+    return this.availabilityService.getByDoctor(req.user.userId);
   }
 
   @Patch(':id')
-  async update(
+  toggle(
+    @Req() req,
     @Param('id') id: string,
-    @Body() updateAvailabilityDto: UpdateAvailabilityDto,
+    @Body() body: { isActive: boolean },
   ) {
-    try {
-      const result = await this.availabilityService.update(
-        +id,
-        updateAvailabilityDto,
-      );
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Availability updated successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to update availability',
-        data: null,
-      };
-    }
+    return this.availabilityService.toggleAvailability(
+      req.user.userId,
+      id,
+      body.isActive,
+    );
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string) {
-    try {
-      const result = await this.availabilityService.remove(+id);
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Availability deleted successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to delete availability',
-        data: null,
-      };
-    }
+  remove(@Req() req, @Param('id') id: string) {
+    return this.availabilityService.remove(req.user.userId, id);
   }
 }

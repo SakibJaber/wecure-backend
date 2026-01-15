@@ -9,6 +9,7 @@ import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { databaseConfig } from './config/database.config';
 import { CommonModule } from './common/common.module';
+import { awsConfig } from 'src/config/aws.config';
 
 const logger = new Logger('Database');
 
@@ -16,7 +17,7 @@ const logger = new Logger('Database');
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig],
+      load: [databaseConfig,awsConfig],
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
