@@ -20,3 +20,5 @@ export class WellnessTip {
 
 export const WellnessTipSchema =
   SchemaFactory.createForClass(WellnessTip);
+
+WellnessTipSchema.index({ title: 1 }, { unique: true });

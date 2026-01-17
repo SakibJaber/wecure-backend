@@ -9,6 +9,7 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  Query,
 } from '@nestjs/common';
 import { SpecialistService } from './specialist.service';
 import { CreateSpecialistDto } from './dto/create-specialist.dto';
@@ -53,13 +54,14 @@ export class SpecialistController {
 
   @Public()
   @Get()
-  async findAll() {
-    const result = await this.specialistService.findAll();
+  async findAll(@Query() query) {
+    const { data, ...meta } = await this.specialistService.findAll(query);
     return {
       success: true,
       statusCode: 200,
       message: 'Specialists fetched successfully',
-      data: result,
+      data,
+      meta,
     };
   }
 

@@ -28,7 +28,7 @@ export class Doctor {
 
   @Prop({
     type: String,
-    enum: ['PENDING', 'VERIFIED', 'SUSPENDED'],
+    enum: ['PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED'],
     default: 'PENDING',
   })
   verificationStatus: string;
@@ -41,3 +41,5 @@ export class Doctor {
 }
 
 export const DoctorSchema = SchemaFactory.createForClass(Doctor);
+
+DoctorSchema.index({ userId: 1 }, { unique: true });

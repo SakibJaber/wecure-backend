@@ -2,8 +2,8 @@ import { IsEnum, IsNotEmpty, IsNumber, Matches, Min } from 'class-validator';
 import { DayOfWeek } from 'src/common/enum/days.enum';
 
 export class CreateAvailabilityDto {
-  @IsEnum(DayOfWeek)
-  dayOfWeek: DayOfWeek;
+  @IsEnum(DayOfWeek, { each: true })
+  days: DayOfWeek[];
 
   @IsNumber()
   @Min(5)
@@ -16,4 +16,8 @@ export class CreateAvailabilityDto {
   @IsNotEmpty()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
   endTime: string;
+
+  @IsNumber()
+  @Min(0)
+  fee: number;
 }

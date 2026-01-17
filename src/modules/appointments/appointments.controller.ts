@@ -1,143 +1,96 @@
 import {
   Controller,
-  Get,
   Post,
-  Body,
+  Get,
   Patch,
-  Param,
-  Delete,
-  UseGuards,
+  Body,
   Req,
+  Param,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from 'src/common/enum/role.enum';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
-import { UpdateAppointmentDto } from './dto/update-appointment.dto';
-import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/common/guards/roles.guard';
+import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
+import { AddAppointmentAttachmentDto } from './dto/add-appointment-attachment.dto';
 
 @Controller('appointments')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AppointmentsController {
   constructor(private readonly appointmentsService: AppointmentsService) {}
 
+  // Patient
+  @Roles(Role.USER)
   @Post()
-  async create(@Body() createAppointmentDto: CreateAppointmentDto) {
-    try {
-      const result =
-        await this.appointmentsService.create(createAppointmentDto);
-      return {
-        success: true,
-        statusCode: 201,
-        message: 'Appointment created successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to create appointment',
-        data: null,
-      };
-    }
+  create(@Req() req, @Body() dto: CreateAppointmentDto) {
+    return this.appointmentsService.create(req.user.userId, dto);
   }
 
-  @Get()
-  async findAll(@Req() req) {
-    try {
-      const result = await this.appointmentsService.findAll(
-        req.user.userId,
-        req.user.role,
-      );
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Appointments fetched successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to fetch appointments',
-        data: null,
-      };
-    }
+  @Roles(Role.USER)
+  @Get('me')
+  getMine(@Req() req) {
+    return this.appointmentsService.getForUser(req.user.userId);
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string, @Req() req) {
-    try {
-      const result = await this.appointmentsService.findOne(
-        id,
-        req.user.userId,
-        req.user.role,
-      );
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Appointment fetched successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to fetch appointment',
-        data: null,
-      };
-    }
-  }
-
-  @Patch(':id')
-  async update(
-    @Param('id') id: string,
-    @Body() updateAppointmentDto: UpdateAppointmentDto,
-    @Req() req,
+  @Roles(Role.USER)
+  @Get('available-slots')
+  getAvailableSlots(
+    @Query('doctorId') doctorId: string,
+    @Query('date') date: string,
   ) {
-    try {
-      const result = await this.appointmentsService.update(
-        id,
-        updateAppointmentDto,
-        req.user.userId,
-        req.user.role,
-      );
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Appointment updated successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to update appointment',
-        data: null,
-      };
-    }
+    return this.appointmentsService.getAvailableSlots(doctorId, new Date(date));
   }
 
-  @Delete(':id')
-  async remove(@Param('id') id: string, @Req() req) {
-    try {
-      const result = await this.appointmentsService.remove(
-        id,
-        req.user.userId,
-        req.user.role,
-      );
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Appointment deleted successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to delete appointment',
-        data: null,
-      };
-    }
+  // Doctor
+  @Roles(Role.DOCTOR)
+  @Get('doctor')
+  getDoctorAppointments(@Req() req) {
+    return this.appointmentsService.getForDoctor(
+      req.user.userId,
+      req.user.doctorId,
+    );
+  }
+
+  // Status update (doctor or patient)
+  @Patch(':id/status')
+  updateStatus(
+    @Req() req,
+    @Param('id') id: string,
+    @Body() dto: UpdateAppointmentStatusDto,
+  ) {
+    // For doctors, we use doctorId for permission check in service
+    const requesterId =
+      req.user.role === Role.DOCTOR ? req.user.userId : req.user.userId;
+
+    return this.appointmentsService.updateStatus(
+      id,
+      requesterId,
+      req.user.role,
+      dto.status,
+      req.user.doctorId,
+    );
+  }
+
+  // Attachments
+  @Post(':id/attachments')
+  addAttachment(
+    @Req() req,
+    @Param('id') id: string,
+    @Body() dto: AddAppointmentAttachmentDto,
+  ) {
+    const requesterId =
+      req.user.role === Role.DOCTOR ? req.user.userId : req.user.userId;
+
+    return this.appointmentsService.addAttachment(
+      id,
+      requesterId,
+      req.user.role,
+      dto,
+      req.user.doctorId,
+    );
   }
 }

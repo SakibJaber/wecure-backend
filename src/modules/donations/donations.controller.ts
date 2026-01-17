@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { DonationsService } from './donations.service';
 import { CreateDonationDto } from './dto/create-donation.dto';
@@ -36,14 +37,15 @@ export class DonationsController {
   }
 
   @Get()
-  async findAll() {
+  async findAll(@Query() query) {
     try {
-      const result = await this.donationsService.findAll();
+      const { data, ...meta } = await this.donationsService.findAll(query);
       return {
         success: true,
         statusCode: 200,
         message: 'Donations fetched successfully',
-        data: result,
+        data,
+        meta,
       };
     } catch (error) {
       return {
@@ -58,7 +60,7 @@ export class DonationsController {
   @Get(':id')
   async findOne(@Param('id') id: string) {
     try {
-      const result = await this.donationsService.findOne(+id);
+      const result = await this.donationsService.findOne(id);
       return {
         success: true,
         statusCode: 200,
@@ -81,7 +83,7 @@ export class DonationsController {
     @Body() updateDonationDto: UpdateDonationDto,
   ) {
     try {
-      const result = await this.donationsService.update(+id, updateDonationDto);
+      const result = await this.donationsService.update(id, updateDonationDto);
       return {
         success: true,
         statusCode: 200,
@@ -101,7 +103,7 @@ export class DonationsController {
   @Delete(':id')
   async remove(@Param('id') id: string) {
     try {
-      const result = await this.donationsService.remove(+id);
+      const result = await this.donationsService.remove(id);
       return {
         success: true,
         statusCode: 200,

@@ -14,3 +14,5 @@ export class WellnessTipLike {
 
 export const WellnessTipLikeSchema =
   SchemaFactory.createForClass(WellnessTipLike);
+
+WellnessTipLikeSchema.index({ tipId: 1, userId: 1 }, { unique: true });

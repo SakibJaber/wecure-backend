@@ -9,6 +9,9 @@ import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { MailService } from '../mail/mail.service';
 import { Role } from 'src/common/enum/role.enum';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
 
 @Injectable()
 export class AuthService {
@@ -17,6 +20,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     private readonly mailService: MailService,
+    @InjectModel(Doctor.name) private doctorModel: Model<DoctorDocument>,
   ) {}
 
   async register(data: {
@@ -129,21 +133,34 @@ export class AuthService {
   }
 
   private async generateToken(userId: string, role: string, email: string) {
+    let doctorId: string | null = null;
+
+    if (role === Role.DOCTOR) {
+      const doctor = await this.doctorModel.findOne({ userId });
+      if (doctor) {
+        doctorId = doctor._id.toString();
+      }
+    }
+
+    const payload: any = {
+      userId,
+      role,
+      email,
+    };
+
+    if (doctorId) {
+      payload.doctorId = doctorId;
+    }
+
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(
-        { userId, role, email },
-        {
-          secret: this.config.get<string>('JWT_SECRET'),
-          expiresIn: this.config.get<string>('JWT_ACC_EXPIRATION') as any,
-        },
-      ),
-      this.jwtService.signAsync(
-        { userId, role, email },
-        {
-          secret: this.config.get<string>('JWT_REFRESH_SECRET'),
-          expiresIn: this.config.get<string>('JWT_REF_EXPIRATION') as any,
-        },
-      ),
+      this.jwtService.signAsync(payload, {
+        secret: this.config.get<string>('JWT_SECRET'),
+        expiresIn: this.config.get<string>('JWT_ACC_EXPIRATION') as any,
+      }),
+      this.jwtService.signAsync(payload, {
+        secret: this.config.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.config.get<string>('JWT_REF_EXPIRATION') as any,
+      }),
     ]);
 
     return {

@@ -35,8 +35,23 @@ export class SpecialistService {
     return createdSpecialist.save();
   }
 
-  async findAll() {
-    return this.specialistModel.find().exec();
+  async findAll(query: any) {
+    const page = parseInt(query.page) || 1;
+    const limit = parseInt(query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.specialistModel.find().skip(skip).limit(limit).exec(),
+      this.specialistModel.countDocuments(),
+    ]);
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(id: string) {

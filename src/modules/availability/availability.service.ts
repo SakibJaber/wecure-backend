@@ -11,24 +11,45 @@ import {
 } from './schemas/availability.schema';
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
 
+import { DoctorsService } from '../doctors/doctors.service';
+
 @Injectable()
 export class AvailabilityService {
   constructor(
     @InjectModel(DoctorAvailability.name)
     private availabilityModel: Model<AvailabilityDocument>,
+    private readonly doctorsService: DoctorsService,
   ) {}
 
   // ---------------- Create ----------------
-  async create(
-    doctorId: Types.ObjectId,
-    dto: CreateAvailabilityDto,
-  ) {
+  async create(userId: string, dto: CreateAvailabilityDto) {
+    const doctor = await this.doctorsService.getMyProfile(userId);
+    if (!doctor) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+
     this.validateTimeRange(dto.startTime, dto.endTime, dto.slotSizeMinutes);
 
-    return this.availabilityModel.create({
-      doctorId,
-      ...dto,
-    });
+    const results: any[] = [];
+    for (const day of dto.days) {
+      // Use upsert to update if exists, or create new
+      const result = await this.availabilityModel.findOneAndUpdate(
+        { doctorId: doctor._id, dayOfWeek: day },
+        {
+          doctorId: doctor._id,
+          dayOfWeek: day,
+          slotSizeMinutes: dto.slotSizeMinutes,
+          startTime: dto.startTime,
+          endTime: dto.endTime,
+          fee: dto.fee,
+          isActive: true,
+        },
+        { upsert: true, new: true },
+      );
+      results.push(result as any);
+    }
+
+    return results;
   }
 
   // ---------------- Get ----------------
@@ -39,15 +60,28 @@ export class AvailabilityService {
       .lean();
   }
 
+  async getMyAvailability(userId: string) {
+    const doctor = await this.doctorsService.getMyProfile(userId);
+    if (!doctor) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+    return this.getByDoctor(doctor._id);
+  }
+
   // ---------------- Update ----------------
   async toggleAvailability(
-    doctorId: Types.ObjectId,
+    userId: string,
     availabilityId: string,
     isActive: boolean,
   ) {
+    const doctor = await this.doctorsService.getMyProfile(userId);
+    if (!doctor) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+
     const availability = await this.availabilityModel.findOne({
       _id: availabilityId,
-      doctorId,
+      doctorId: doctor._id,
     });
 
     if (!availability) {
@@ -58,20 +92,28 @@ export class AvailabilityService {
     return availability.save();
   }
 
+  async deactivateAllForDoctor(doctorId: string) {
+    return this.availabilityModel.updateMany(
+      { doctorId: new Types.ObjectId(doctorId) },
+      { isActive: false },
+    );
+  }
+
   // ---------------- Delete ----------------
-  async remove(doctorId: Types.ObjectId, availabilityId: string) {
+  async remove(userId: string, availabilityId: string) {
+    const doctor = await this.doctorsService.getMyProfile(userId);
+    if (!doctor) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+
     return this.availabilityModel.deleteOne({
       _id: availabilityId,
-      doctorId,
+      doctorId: doctor._id,
     });
   }
 
   // ---------------- Slot Generation ----------------
-  generateSlots(
-    startTime: string,
-    endTime: string,
-    slotSizeMinutes: number,
-  ) {
+  generateSlots(startTime: string, endTime: string, slotSizeMinutes: number) {
     const slots: string[] = [];
 
     let current = this.timeToMinutes(startTime);
@@ -95,15 +137,11 @@ export class AvailabilityService {
     const end = this.timeToMinutes(endTime);
 
     if (start >= end) {
-      throw new BadRequestException(
-        'Start time must be before end time',
-      );
+      throw new BadRequestException('Start time must be before end time');
     }
 
-    if ((end - start) < slotSize) {
-      throw new BadRequestException(
-        'Time range is too small for slot size',
-      );
+    if (end - start < slotSize) {
+      throw new BadRequestException('Time range is too small for slot size');
     }
   }
 

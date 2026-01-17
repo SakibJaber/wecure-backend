@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   Req,
+  Query,
 } from '@nestjs/common';
 import { WellnessTipsService } from './wellness-tips.service';
 import { CreateWellnessTipDto } from './dto/create-wellness-tip.dto';
@@ -69,14 +70,15 @@ export class WellnessTipsController {
   }
 
   @Get()
-  async findAll() {
+  async findAll(@Query() query) {
     try {
-      const result = await this.wellnessTipsService.findAll();
+      const { data, ...meta } = await this.wellnessTipsService.findAll(query);
       return {
         success: true,
         statusCode: 200,
         message: 'Wellness tips fetched successfully',
-        data: result,
+        data,
+        meta,
       };
     } catch (error) {
       return {

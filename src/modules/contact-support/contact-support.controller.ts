@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   Req,
+  Query,
 } from '@nestjs/common';
 import { ContactSupportService } from './contact-support.service';
 import { CreateContactSupportDto } from './dto/create-contact-support.dto';
@@ -53,14 +54,15 @@ export class ContactSupportController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @Get()
-  async findAll() {
+  async findAll(@Query() query) {
     try {
-      const result = await this.contactSupportService.findAll();
+      const { data, ...meta } = await this.contactSupportService.findAll(query);
       return {
         success: true,
         statusCode: 200,
         message: 'Support messages fetched successfully',
-        data: result,
+        data,
+        meta,
       };
     } catch (error) {
       return {

@@ -8,12 +8,14 @@ import { JwtRefreshStrategy } from 'src/modules/auth/strategy/jwt-refresh.strate
 import { JwtStrategy } from 'src/modules/auth/strategy/jwt.strategy';
 import { MailModule } from 'src/modules/mail/mail.module';
 import { UsersModule } from 'src/modules/users/users.module';
+import { DoctorsModule } from '../doctors/doctors.module';
 
 @Module({
   imports: [
     UsersModule,
     PassportModule,
     MailModule,
+    DoctorsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -27,4 +29,3 @@ import { UsersModule } from 'src/modules/users/users.module';
   controllers: [AuthController],
 })
 export class AuthModule {}
-

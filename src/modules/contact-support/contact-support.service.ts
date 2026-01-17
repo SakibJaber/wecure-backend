@@ -26,12 +26,29 @@ export class ContactSupportService {
     return newMessage.save();
   }
 
-  async findAll(): Promise<ContactSupport[]> {
-    return this.contactSupportModel
-      .find()
-      .populate('userId', 'name email role')
-      .sort({ createdAt: -1 })
-      .exec();
+  async findAll(query: any): Promise<any> {
+    const page = parseInt(query.page) || 1;
+    const limit = parseInt(query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.contactSupportModel
+        .find()
+        .populate('userId', 'name email role')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.contactSupportModel.countDocuments(),
+    ]);
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findByUser(userId: string): Promise<ContactSupport[]> {

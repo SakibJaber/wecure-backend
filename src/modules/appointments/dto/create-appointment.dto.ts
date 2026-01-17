@@ -1,46 +1,32 @@
 import {
-  IsString,
   IsNotEmpty,
   IsDateString,
-  IsNumber,
   IsOptional,
-  IsEnum,
+  IsString,
 } from 'class-validator';
 
 export class CreateAppointmentDto {
-  @IsString()
-  @IsNotEmpty()
-  userId: string;
-
-  @IsString()
   @IsNotEmpty()
   doctorId: string;
 
-  @IsString()
   @IsNotEmpty()
   specialistId: string;
 
   @IsDateString()
-  @IsNotEmpty()
   appointmentDate: string;
 
-  @IsString()
   @IsNotEmpty()
-  appointmentTime: string;
-
-  @IsString()
-  @IsNotEmpty()
-  reasonTitle: string;
-
-  @IsString()
-  @IsNotEmpty()
-  reasonDetails: string;
+  appointmentTime: string; // HH:mm
 
   @IsOptional()
-  @IsEnum(['UPCOMING', 'ONGOING', 'COMPLETED', 'CANCELLED'])
-  status?: string;
+  @IsString()
+  reasonTitle?: string;
 
-  @IsNumber()
-  @IsNotEmpty()
-  fee: number;
+  @IsOptional()
+  @IsString()
+  reasonDetails?: string;
+
+  @IsOptional()
+  @IsString({ each: true })
+  attachmentIds?: string[];
 }

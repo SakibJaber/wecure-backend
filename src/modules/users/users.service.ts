@@ -4,6 +4,8 @@ import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { User, UserDocument } from './schemas/user.schema';
 import { EncryptionService } from 'src/common/services/encryption.service';
+import { Role } from 'src/common/enum/role.enum';
+import { UserStatus } from 'src/common/enum/user.status.enum';
 
 @Injectable()
 export class UsersService {
@@ -30,9 +32,13 @@ export class UsersService {
       data.phone = this.encryptionService.encrypt(data.phone);
     }
 
+    const status =
+      data.role === Role.DOCTOR ? UserStatus.PENDING : UserStatus.ACTIVE;
+
     return this.userModel.create({
       ...data,
       password: hashedPassword,
+      status,
     });
   }
 

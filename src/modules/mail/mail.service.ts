@@ -1,16 +1,18 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import * as ejs from 'ejs';
+import * as path from 'path';
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
   private transporter: nodemailer.Transporter;
-  private emailTemplate: string;
-
   constructor(private config: ConfigService) {
-    this.emailTemplate = this.compileEmailTemplate();
-
     this.transporter = nodemailer.createTransport({
       host: config.get('MAIL_HOST'),
       port: +(config.get<number>('MAIL_PORT') ?? 465),
@@ -34,34 +36,6 @@ export class MailService {
     this.verifyTransporter();
   }
 
-  private compileEmailTemplate(): string {
-    return `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>RNA Supplies Newsletter</title>
-    <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #2c5aa0; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
-        .content { padding: 20px; background: #f9f9f9; border: 1px solid #ddd; border-top: none; }
-        .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>RNA Supplies Newsletter</h1>
-    </div>
-    <div class="content">
-        {{CONTENT}}
-    </div>
-    <div class="footer">
-        <p>&copy; ${new Date().getFullYear()} RNA Supplies. All rights reserved.</p>
-        <p><a href="{{UNSUBSCRIBE_LINK}}">Unsubscribe</a></p>
-    </div>
-</body>
-</html>`;
-  }
-
   private async verifyTransporter() {
     try {
       await this.transporter.verify();
@@ -73,12 +47,14 @@ export class MailService {
 
   async sendEmail(to: string, subject: string, text: string) {
     try {
-      const html = this.emailTemplate.replace(
-        '{{CONTENT}}',
-        text
+      const templatePath = path.join(__dirname, 'templates', 'email.ejs');
+      const html = await ejs.renderFile(templatePath, {
+        title: subject,
+        content: text
           .replace(/\n/g, '<br>')
           .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1">$1</a>'),
-      );
+        year: new Date().getFullYear(),
+      });
 
       const mailOptions = {
         from: this.config.get('MAIL_FROM'),
@@ -89,15 +65,12 @@ export class MailService {
         // Add headers to help with deliverability
         headers: {
           'X-Priority': '3',
-          'X-Mailer': 'RNA Supplies Newsletter System',
+          'X-Mailer': 'WECURE System',
         },
       };
 
       const result = await this.transporter.sendMail(mailOptions);
-
-      // Log success for monitoring
-      this.logger.log(`✓ Email sent to ${to}: ${result.messageId}`);
-
+      this.logger.log(`✓ Email sent to ${to}: ${subject}`);
       return result;
     } catch (error) {
       // Enhanced error logging
@@ -117,12 +90,8 @@ export class MailService {
 
   async sendResetPasswordOtp(email: string, code: string) {
     try {
-      await this.transporter.sendMail({
-        from: this.config.get('MAIL_FROM'),
-        to: email,
-        subject: 'Your Password Reset OTP',
-        text: `Your password reset OTP is: ${code}\n\nIt expires in ${this.config.get('OTP_TTL_MINUTES')} minutes.`,
-      });
+      const message = `Your password reset OTP is: <strong>${code}</strong>\n\nIt expires in ${this.config.get('OTP_TTL_MINUTES')} minutes.`;
+      await this.sendEmail(email, 'Your Password Reset OTP', message);
     } catch (err) {
       throw new InternalServerErrorException('Failed to send email');
     }
@@ -131,14 +100,82 @@ export class MailService {
   async sendEmailVerificationOtp(email: string, code: string) {
     try {
       const minutes = this.config.get<string>('OTP_EXPIRATION_MINUTES') ?? '15';
-      await this.transporter.sendMail({
-        from: this.config.get('MAIL_FROM'),
-        to: email,
-        subject: 'Verify your email',
-        text: `Your verification code is: ${code}\n\nIt expires in ${minutes} minutes.`,
-      });
+      const message = `Your verification code is: <strong>${code}</strong>\n\nIt expires in ${minutes} minutes.`;
+      await this.sendEmail(email, 'Verify your email', message);
     } catch (err) {
       throw new InternalServerErrorException('Failed to send email');
+    }
+  }
+
+  async sendDoctorAcceptanceEmail(email: string, name: string) {
+    try {
+      await this.sendEmail(
+        email,
+        'Congratulations! Your WeCure Profile is Verified',
+        `Dear Dr. ${name},\n\nWe are pleased to inform you that your profile on WeCure has been verified. You can now start setting up your availability and receiving appointments.\n\nWelcome to our community!`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `Failed to send acceptance email to ${email}: ${err.message}`,
+      );
+    }
+  }
+
+  async sendDoctorRejectionEmail(email: string, name: string, reason?: string) {
+    try {
+      let message = `Dear Dr. ${name},\n\nThank you for your interest in WeCure. After reviewing your documents, we regret to inform you that we cannot verify your profile at this time.`;
+      if (reason) {
+        message += `\n\nReason: ${reason}`;
+      }
+      message += `\n\nIf you believe this is a mistake, please contact our support team.`;
+
+      await this.sendEmail(
+        email,
+        'Update on your WeCure Registration',
+        message,
+      );
+    } catch (err) {
+      this.logger.error(
+        `Failed to send rejection email to ${email}: ${err.message}`,
+      );
+    }
+  }
+
+  async sendDoctorSuspensionEmail(
+    email: string,
+    name: string,
+    reason?: string,
+  ) {
+    try {
+      let message = `Dear Dr. ${name},\n\nWe are writing to inform you that your WeCure profile has been suspended. During this time, your profile will not be visible to patients, and your upcoming appointments have been cancelled.`;
+      if (reason) {
+        message += `\n\nReason: ${reason}`;
+      }
+      message += `\n\nIf you have any questions, please contact our administration.`;
+
+      await this.sendEmail(
+        email,
+        'Your WeCure Profile has been Suspended',
+        message,
+      );
+    } catch (err) {
+      this.logger.error(
+        `Failed to send suspension email to ${email}: ${err.message}`,
+      );
+    }
+  }
+
+  async sendDoctorUnsuspensionEmail(email: string, name: string) {
+    try {
+      await this.sendEmail(
+        email,
+        'Your WeCure Profile Suspension has been Lifted',
+        `Dear Dr. ${name},\n\nWe are happy to inform you that the suspension on your WeCure profile has been lifted. You can now resume your practice on our platform.\n\nPlease remember to update your availability.`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `Failed to send unsuspension email to ${email}: ${err.message}`,
+      );
     }
   }
 

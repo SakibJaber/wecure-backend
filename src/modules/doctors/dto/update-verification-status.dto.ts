@@ -3,6 +3,7 @@ import { IsEnum, IsOptional, IsString } from 'class-validator';
 export enum VerificationStatus {
   PENDING = 'PENDING',
   VERIFIED = 'VERIFIED',
+  REJECTED = 'REJECTED',
   SUSPENDED = 'SUSPENDED',
 }
 

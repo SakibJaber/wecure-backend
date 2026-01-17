@@ -3,6 +3,8 @@ import {
   ForbiddenException,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -16,6 +18,9 @@ import {
   DoctorExperienceDocument,
 } from './schemas/doctor-experience.schema';
 import { UploadsService } from '../uploads/uploads.service';
+import { AvailabilityService } from '../availability/availability.service';
+import { AppointmentsService } from '../appointments/appointments.service';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class DoctorsService {
@@ -29,6 +34,14 @@ export class DoctorsService {
     @InjectModel(DoctorExperience.name)
     private doctorExperienceModel: Model<DoctorExperienceDocument>,
     private readonly uploadsService: UploadsService,
+
+    @Inject(forwardRef(() => AvailabilityService))
+    private readonly availabilityService: AvailabilityService,
+
+    @Inject(forwardRef(() => AppointmentsService))
+    private readonly appointmentsService: AppointmentsService,
+
+    private readonly mailService: MailService,
   ) {}
 
   // ---------- Doctor Profile ----------
@@ -122,8 +135,17 @@ export class DoctorsService {
     status: string,
     note?: string,
   ) {
+    const doctor = await this.doctorModel
+      .findById(doctorId)
+      .populate('userId', 'name email');
+    if (!doctor) throw new NotFoundException('Doctor not found');
+
+    const previousStatus = doctor.verificationStatus;
+    const user = doctor.userId as any;
+
     const updateData: any = {
       verificationStatus: status,
+      verificationNote: note || '',
     };
 
     // Update isVerified for backward compatibility
@@ -133,33 +155,84 @@ export class DoctorsService {
       updateData.isVerified = false;
     }
 
-    if (note) {
-      updateData.verificationNote = note;
-    }
-
-    const doctor = await this.doctorModel.findByIdAndUpdate(
+    const updatedDoctor = await this.doctorModel.findByIdAndUpdate(
       doctorId,
       updateData,
       { new: true },
     );
 
-    if (!doctor) throw new NotFoundException('Doctor not found');
-    return doctor;
-  }
+    // Handle side effects and emails (Non-blocking for faster response)
+    if (user && user.email) {
+      const runSideEffects = async () => {
+        try {
+          if (status === 'VERIFIED') {
+            if (previousStatus === 'SUSPENDED') {
+              await this.mailService.sendDoctorUnsuspensionEmail(
+                user.email,
+                user.name,
+              );
+            } else if (previousStatus !== 'VERIFIED') {
+              // Send acceptance email if moving to VERIFIED from anything else (PENDING, REJECTED, etc.)
+              await this.mailService.sendDoctorAcceptanceEmail(
+                user.email,
+                user.name,
+              );
+            }
+          } else if (status === 'REJECTED') {
+            await this.mailService.sendDoctorRejectionEmail(
+              user.email,
+              user.name,
+              note,
+            );
+            // Also deactivate availability and cancel appointments for rejected doctors
+            await this.availabilityService.deactivateAllForDoctor(doctorId);
+            await this.appointmentsService.cancelUpcomingForDoctor(doctorId);
+          } else if (status === 'SUSPENDED') {
+            await this.mailService.sendDoctorSuspensionEmail(
+              user.email,
+              user.name,
+              note,
+            );
+            await this.availabilityService.deactivateAllForDoctor(doctorId);
+            await this.appointmentsService.cancelUpcomingForDoctor(doctorId);
+          }
+        } catch (error) {
+          // Log background task errors but don't block the response
+          console.error(
+            `Error in background side effects for doctor ${doctorId}:`,
+            error,
+          );
+        }
+      };
 
-  async getAllDoctorsForAdmin(filters?: any) {
-    const query: any = {};
-
-    if (filters?.status) {
-      query.verificationStatus = filters.status;
+      // Trigger background tasks without awaiting
+      runSideEffects();
     }
 
-    const doctors = await this.doctorModel
-      .find(query)
-      .populate('userId', 'name email')
-      .populate('specialtyId', 'name')
-      .sort({ createdAt: -1 })
-      .lean();
+    return updatedDoctor;
+  }
+
+  async getAllDoctorsForAdmin(query: any) {
+    const page = parseInt(query.page) || 1;
+    const limit = parseInt(query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const filter: any = {};
+    if (query.status) {
+      filter.verificationStatus = query.status;
+    }
+
+    const [doctors, total] = await Promise.all([
+      this.doctorModel
+        .find(filter)
+        .populate('userId', 'name email')
+        .populate('specialtyId', 'name')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      this.doctorModel.countDocuments(filter),
+    ]);
 
     // Generate pre-signed URLs for verification documents
     for (const doctor of doctors) {
@@ -175,7 +248,13 @@ export class DoctorsService {
       }
     }
 
-    return doctors;
+    return {
+      data: doctors,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async getPublicProfile(doctorId: string) {

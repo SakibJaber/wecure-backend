@@ -79,8 +79,25 @@ export class DoctorsController {
   // Admin endpoints
   @Roles(Role.ADMIN)
   @Get('admin/all')
-  getAllDoctors(@Query() filters) {
-    return this.doctorsService.getAllDoctorsForAdmin(filters);
+  async getAllDoctors(@Query() query) {
+    try {
+      const { data, ...meta } =
+        await this.doctorsService.getAllDoctorsForAdmin(query);
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Doctors fetched successfully',
+        data,
+        meta,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to fetch doctors',
+        data: null,
+      };
+    }
   }
 
   @Roles(Role.ADMIN)

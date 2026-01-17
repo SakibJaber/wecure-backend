@@ -29,7 +29,7 @@ export class AvailabilityController {
 
   @Get()
   getMine(@Req() req) {
-    return this.availabilityService.getByDoctor(req.user.userId);
+    return this.availabilityService.getMyAvailability(req.user.userId);
   }
 
   @Patch(':id')

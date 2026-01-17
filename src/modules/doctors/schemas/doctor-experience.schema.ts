@@ -26,3 +26,5 @@ export class DoctorExperience {
 
 export const DoctorExperienceSchema =
   SchemaFactory.createForClass(DoctorExperience);
+
+DoctorExperienceSchema.index({ doctorId: 1 }, { unique: true });

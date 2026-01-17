@@ -41,8 +41,23 @@ export class WellnessTipsService {
     return createdTip.save();
   }
 
-  async findAll() {
-    return this.wellnessTipModel.find().exec();
+  async findAll(query: any) {
+    const page = parseInt(query.page) || 1;
+    const limit = parseInt(query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.wellnessTipModel.find().skip(skip).limit(limit).exec(),
+      this.wellnessTipModel.countDocuments(),
+    ]);
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(id: string) {

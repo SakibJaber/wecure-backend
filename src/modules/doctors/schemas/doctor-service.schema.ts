@@ -13,3 +13,5 @@ export class DoctorService {
 }
 
 export const DoctorServiceSchema = SchemaFactory.createForClass(DoctorService);
+
+DoctorServiceSchema.index({ doctorId: 1, name: 1 }, { unique: true });

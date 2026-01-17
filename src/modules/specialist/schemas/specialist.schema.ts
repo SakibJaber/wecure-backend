@@ -19,3 +19,5 @@ export class Specialist {
 }
 
 export const SpecialistSchema = SchemaFactory.createForClass(Specialist);
+
+SpecialistSchema.index({ name: 1 }, { unique: true });

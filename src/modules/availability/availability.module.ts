@@ -6,6 +6,7 @@ import {
   DoctorAvailability,
   DoctorAvailabilitySchema,
 } from './schemas/availability.schema';
+import { DoctorsModule } from '../doctors/doctors.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import {
         schema: DoctorAvailabilitySchema,
       },
     ]),
+    DoctorsModule,
   ],
   controllers: [AvailabilityController],
   providers: [AvailabilityService],

@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
@@ -36,14 +37,15 @@ export class ReviewsController {
   }
 
   @Get()
-  async findAll() {
+  async findAll(@Query() query) {
     try {
-      const result = await this.reviewsService.findAll();
+      const { data, ...meta } = await this.reviewsService.findAll(query);
       return {
         success: true,
         statusCode: 200,
         message: 'Reviews fetched successfully',
-        data: result,
+        data,
+        meta,
       };
     } catch (error) {
       return {
@@ -58,7 +60,7 @@ export class ReviewsController {
   @Get(':id')
   async findOne(@Param('id') id: string) {
     try {
-      const result = await this.reviewsService.findOne(+id);
+      const result = await this.reviewsService.findOne(id);
       return {
         success: true,
         statusCode: 200,
@@ -81,7 +83,7 @@ export class ReviewsController {
     @Body() updateReviewDto: UpdateReviewDto,
   ) {
     try {
-      const result = await this.reviewsService.update(+id, updateReviewDto);
+      const result = await this.reviewsService.update(id, updateReviewDto);
       return {
         success: true,
         statusCode: 200,
@@ -101,7 +103,7 @@ export class ReviewsController {
   @Delete(':id')
   async remove(@Param('id') id: string) {
     try {
-      const result = await this.reviewsService.remove(+id);
+      const result = await this.reviewsService.remove(id);
       return {
         success: true,
         statusCode: 200,

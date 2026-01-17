@@ -19,7 +19,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(
     payload: any,
-  ): Promise<{ userId: string; email: string; role: string }> {
+  ): Promise<{
+    userId: string;
+    email: string;
+    role: string;
+    doctorId?: string;
+  }> {
     // Validate payload structure
     if (!payload?.userId || !payload?.email || !payload?.role) {
       throw new UnauthorizedException('Invalid token payload');
@@ -43,6 +48,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           userId: payload.userId,
           email: payload.email,
           role: payload.role,
+          ...(payload.doctorId && { doctorId: payload.doctorId }),
         };
       case UserStatus.PENDING:
         throw new UnauthorizedException('Account is pending approval');

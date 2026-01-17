@@ -9,7 +9,10 @@ import {
   Req,
   Query,
   Param,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -18,10 +21,15 @@ import { ChangeRoleDto } from './dto/change-role.dto';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { Role } from 'src/common/enum/role.enum';
+import { PublicUploadService } from '../public-upload/public-upload.service';
+import { UPLOAD_FOLDERS } from 'src/common/constants/constants';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly publicUploadService: PublicUploadService,
+  ) {}
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
@@ -46,8 +54,21 @@ export class UsersController {
 
   @UseGuards(JwtAuthGuard)
   @Patch('profile')
-  async updateProfile(@Req() req, @Body() dto: UpdateProfileDto) {
+  @UseInterceptors(FileInterceptor('image'))
+  async updateProfile(
+    @Req() req,
+    @Body() dto: UpdateProfileDto,
+    @UploadedFile() image?: Express.Multer.File,
+  ) {
     try {
+      if (image) {
+        const imageUrl = await this.publicUploadService.handleUpload(
+          image,
+          UPLOAD_FOLDERS.USER_PROFILES,
+        );
+        dto.profileImage = imageUrl;
+      }
+
       const user = await this.usersService.updateProfile(req.user.userId, dto);
       return {
         success: true,
@@ -112,12 +133,13 @@ export class UsersController {
   @Get()
   async findAll(@Query() query) {
     try {
-      const result = await this.usersService.findAll(query);
+      const { data, ...meta } = await this.usersService.findAll(query);
       return {
         success: true,
         statusCode: 200,
         message: 'Users fetched successfully',
-        data: result,
+        data,
+        meta,
       };
     } catch (error) {
       return {
