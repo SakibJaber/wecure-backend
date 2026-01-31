@@ -16,6 +16,7 @@ import { SpecialistModule } from './specialist/specialist.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { PublicUploadModule } from 'src/modules/public-upload/public-upload.module';
 import { ContactSupportModule } from './contact-support/contact-support.module';
+import { LegalContentModule } from './legal-content/legal-content.module';
 
 @Module({
   imports: [
@@ -25,7 +26,7 @@ import { ContactSupportModule } from './contact-support/contact-support.module';
     AvailabilityModule,
     AppointmentsModule,
     ChatModule,
-    // ReviewsModule,
+    ReviewsModule,
     PaymentsModule,
     // DonationsModule,
     WellnessTipsModule,
@@ -34,6 +35,7 @@ import { ContactSupportModule } from './contact-support/contact-support.module';
     UploadsModule,
     PublicUploadModule,
     ContactSupportModule,
+    LegalContentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

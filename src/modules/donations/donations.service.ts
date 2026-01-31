@@ -68,4 +68,8 @@ export class DonationsService {
     }
     return deletedDonation;
   }
+
+  async findByReference(reference: string) {
+    return this.donationModel.findOne({ paystackReference: reference }).exec();
+  }
 }

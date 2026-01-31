@@ -16,6 +16,9 @@ export class Donation {
 
   @Prop({ default: 'NGN' })
   currency: string;
+
+  @Prop({ enum: ['PENDING', 'PAID', 'FAILED'], default: 'PENDING' })
+  status: string;
 }
 
 export const DonationSchema = SchemaFactory.createForClass(Donation);

@@ -17,24 +17,32 @@ import {
   DoctorExperience,
   DoctorExperienceDocument,
 } from './schemas/doctor-experience.schema';
+import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
 import { UploadsService } from '../uploads/uploads.service';
 import { AvailabilityService } from '../availability/availability.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { MailService } from '../mail/mail.service';
+import { UsersService } from '../users/users.service';
+import { PublicUploadService } from '../public-upload/public-upload.service';
+import { UPLOAD_FOLDERS } from 'src/common/constants/constants';
+import { NotificationsService } from '../notifications/notifications.service';
+import { DoctorAggregationHelper } from './helpers/doctor-aggregation.helper';
+import { DoctorRatingHelper } from './helpers/doctor-rating.helper';
+import { DoctorSlotsHelper } from './helpers/doctor-slots.helper';
 
 @Injectable()
 export class DoctorsService {
   constructor(
     @InjectModel(Doctor.name)
     private doctorModel: Model<DoctorDocument>,
-
     @InjectModel(DoctorService.name)
     private doctorServiceModel: Model<DoctorServiceDocument>,
-
     @InjectModel(DoctorExperience.name)
     private doctorExperienceModel: Model<DoctorExperienceDocument>,
-    private readonly uploadsService: UploadsService,
+    @InjectModel(Review.name)
+    private reviewModel: Model<ReviewDocument>,
 
+    private readonly uploadsService: UploadsService,
     @Inject(forwardRef(() => AvailabilityService))
     private readonly availabilityService: AvailabilityService,
 
@@ -42,6 +50,12 @@ export class DoctorsService {
     private readonly appointmentsService: AppointmentsService,
 
     private readonly mailService: MailService,
+    private readonly usersService: UsersService,
+    private readonly publicUploadService: PublicUploadService,
+    private readonly notificationsService: NotificationsService,
+    private readonly aggregationHelper: DoctorAggregationHelper,
+    private readonly ratingHelper: DoctorRatingHelper,
+    private readonly slotsHelper: DoctorSlotsHelper,
   ) {}
 
   // ---------- Doctor Profile ----------
@@ -53,6 +67,24 @@ export class DoctorsService {
       userId,
       ...dto,
     });
+  }
+
+  async updateProfile(userId: string, dto: any, file?: Express.Multer.File) {
+    const doctor = await this.doctorModel.findOne({ userId });
+    if (!doctor) throw new NotFoundException('Doctor profile not found');
+
+    if (file) {
+      const imageUrl = await this.publicUploadService.handleUpload(
+        file,
+        UPLOAD_FOLDERS.USER_PROFILES,
+      );
+      await this.usersService.updateProfile(userId, { profileImage: imageUrl });
+    }
+
+    return this.doctorModel
+      .findByIdAndUpdate(doctor._id, dto, { new: true })
+      .populate('userId', 'name email profileImage')
+      .populate('specialtyId', 'name');
   }
 
   async getMyProfile(userId: string) {
@@ -161,52 +193,47 @@ export class DoctorsService {
       { new: true },
     );
 
-    // Handle side effects and emails (Non-blocking for faster response)
-    if (user && user.email) {
-      const runSideEffects = async () => {
-        try {
-          if (status === 'VERIFIED') {
-            if (previousStatus === 'SUSPENDED') {
-              await this.mailService.sendDoctorUnsuspensionEmail(
-                user.email,
-                user.name,
-              );
-            } else if (previousStatus !== 'VERIFIED') {
-              // Send acceptance email if moving to VERIFIED from anything else (PENDING, REJECTED, etc.)
-              await this.mailService.sendDoctorAcceptanceEmail(
-                user.email,
-                user.name,
-              );
-            }
-          } else if (status === 'REJECTED') {
-            await this.mailService.sendDoctorRejectionEmail(
-              user.email,
-              user.name,
-              note,
-            );
-            // Also deactivate availability and cancel appointments for rejected doctors
-            await this.availabilityService.deactivateAllForDoctor(doctorId);
-            await this.appointmentsService.cancelUpcomingForDoctor(doctorId);
-          } else if (status === 'SUSPENDED') {
-            await this.mailService.sendDoctorSuspensionEmail(
-              user.email,
-              user.name,
-              note,
-            );
-            await this.availabilityService.deactivateAllForDoctor(doctorId);
-            await this.appointmentsService.cancelUpcomingForDoctor(doctorId);
-          }
-        } catch (error) {
-          // Log background task errors but don't block the response
-          console.error(
-            `Error in background side effects for doctor ${doctorId}:`,
-            error,
-          );
+    // Emit events for notifications (replaces direct mail calls)
+    if (user) {
+      if (status === 'VERIFIED') {
+        if (previousStatus === 'SUSPENDED') {
+          this.notificationsService.emit('doctor.unsuspended', {
+            doctorId,
+            userId: user._id,
+            email: user.email,
+            name: user.name,
+          });
+        } else if (previousStatus !== 'VERIFIED') {
+          this.notificationsService.emit('doctor.verified', {
+            doctorId,
+            userId: user._id,
+            email: user.email,
+            name: user.name,
+          });
         }
-      };
-
-      // Trigger background tasks without awaiting
-      runSideEffects();
+      } else if (status === 'REJECTED') {
+        this.notificationsService.emit('doctor.rejected', {
+          doctorId,
+          userId: user._id,
+          email: user.email,
+          name: user.name,
+          note,
+        });
+        // Side effects (non-blocking)
+        this.availabilityService.deactivateAllForDoctor(doctorId);
+        this.appointmentsService.cancelUpcomingForDoctor(doctorId);
+      } else if (status === 'SUSPENDED') {
+        this.notificationsService.emit('doctor.suspended', {
+          doctorId,
+          userId: user._id,
+          email: user.email,
+          name: user.name,
+          note,
+        });
+        // Side effects (non-blocking)
+        this.availabilityService.deactivateAllForDoctor(doctorId);
+        this.appointmentsService.cancelUpcomingForDoctor(doctorId);
+      }
     }
 
     return updatedDoctor;
@@ -261,23 +288,125 @@ export class DoctorsService {
     const doctor = await this.doctorModel
       .findOne({ _id: doctorId, isVerified: true })
       .select('-verificationDocuments')
+      .populate('userId', 'name email profileImage')
       .populate('specialtyId', 'name')
       .lean();
 
     if (!doctor) throw new NotFoundException('Doctor not found');
 
-    const services = await this.doctorServiceModel.find({
-      doctorId: doctor._id,
-    });
+    // Run all queries in parallel for better performance
+    const doctorIdStr = doctor._id.toString();
+    const [services, experiences, reviews, availability] = await Promise.all([
+      this.doctorServiceModel.find({ doctorId: doctor._id }),
+      this.doctorExperienceModel
+        .find({ doctorId: doctor._id })
+        .sort({ isCurrent: -1, startDate: -1 }),
+      this.reviewModel
+        .find({
+          $or: [{ doctorId: doctor._id }, { doctorId: doctorIdStr }],
+        })
+        .populate('userId', 'name profileImage')
+        .sort({ createdAt: -1 })
+        .lean(),
+      this.availabilityService.getByDoctor(doctor._id as Types.ObjectId),
+    ]);
 
-    const experiences = await this.doctorExperienceModel
-      .find({ doctorId: doctor._id })
-      .sort({ isCurrent: -1, startDate: -1 });
+    // Use rating helper to calculate statistics
+    const ratingStats = this.ratingHelper.getRatingStats(reviews);
 
     return {
       doctor,
       services,
       experiences,
+      rating: ratingStats,
+      reviews: reviews.slice(0, 10), // Return latest 10 reviews
+      availability,
     };
+  }
+
+  async getPopularDoctors() {
+    const popularDoctors = await this.doctorModel.aggregate([
+      // Match verified doctors only
+      {
+        $match: {
+          isVerified: true,
+          verificationStatus: 'VERIFIED',
+        },
+      },
+      // Add helper pipeline stages
+      this.aggregationHelper.addDoctorIdStringField(),
+      this.aggregationHelper.lookupReviews(),
+      this.aggregationHelper.calculateRatings(),
+      // Filter for doctors with rating >= 4
+      {
+        $match: {
+          averageRating: { $gte: 4 },
+        },
+      },
+      // Lookup user and specialty details
+      ...this.aggregationHelper.lookupUserDetails(),
+      ...this.aggregationHelper.lookupSpecialtyDetails(),
+      // Project and sort
+      this.aggregationHelper.projectDoctorCard(false),
+      this.aggregationHelper.sortByRating(),
+    ]);
+
+    return popularDoctors;
+  }
+
+  async getDoctorsBySpecialty(specialtyId: string) {
+    const doctors = await this.doctorModel.aggregate([
+      // Match verified doctors with the given specialty
+      {
+        $match: {
+          isVerified: true,
+          verificationStatus: 'VERIFIED',
+          $expr: {
+            $or: [
+              { $eq: ['$specialtyId', new Types.ObjectId(specialtyId)] },
+              { $eq: [{ $toString: '$specialtyId' }, specialtyId] },
+            ],
+          },
+        },
+      },
+      // Add helper pipeline stages
+      this.aggregationHelper.addDoctorIdStringField(),
+      this.aggregationHelper.lookupReviews(),
+      this.aggregationHelper.calculateRatings(),
+      // Lookup availabilities and user/specialty details
+      ...this.aggregationHelper.lookupAvailabilities(),
+      ...this.aggregationHelper.lookupUserDetails(),
+      {
+        $lookup: {
+          from: 'specialists',
+          localField: 'specialtyId',
+          foreignField: '_id',
+          as: 'specialty',
+        },
+      },
+      {
+        $unwind: {
+          path: '$specialty',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      // Project and sort
+      this.aggregationHelper.projectDoctorCard(true),
+      this.aggregationHelper.sortByRating(),
+    ]);
+
+    // Use slots helper to add next available slots
+    return doctors.map((doctor) => {
+      const nextAvailableSlots = this.slotsHelper.generateNextAvailableSlots(
+        doctor,
+        this.availabilityService,
+      );
+
+      return {
+        ...doctor,
+        nextAvailableSlots,
+        availabilities: undefined, // Remove raw availability data
+      };
+    });
   }
 }

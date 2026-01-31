@@ -20,9 +20,6 @@ export class Doctor {
   @Prop()
   about: string;
 
-  @Prop({ required: true })
-  consultationFee: number;
-
   @Prop({ type: [String], default: [] })
   verificationDocuments: string[];
 

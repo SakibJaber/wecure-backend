@@ -12,6 +12,7 @@ import {
 import { AppointmentsService } from './appointments.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { AppointmentAccessGuard } from '../../common/guards/appointment-access.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from 'src/common/enum/role.enum';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
@@ -92,5 +93,30 @@ export class AppointmentsController {
       dto,
       req.user.doctorId,
     );
+  }
+
+  // Agora Video Token
+  @UseGuards(AppointmentAccessGuard)
+  @Post(':id/video/token')
+  getVideoToken(@Req() req, @Param('id') id: string) {
+    const user = req.user;
+    // Use userId or doctorId as the UID for Agora
+    // For simplicity and uniqueness, we can use the numeric timestamp of the ID creation or hash it
+    // But Agora UID must be int (for buildTokenWithUid) or string (for buildTokenWithAccount)
+    // We used buildTokenWithAccount in service if string is passed, so we can pass the string ID directly.
+    // However, let's use the user's ID from the token.
+    const uid = user.userId;
+    const channelName = `appointment_${id}`;
+    return this.appointmentsService.generateAgoraToken(channelName, uid);
+  }
+
+  // Agora Chat Token
+  @UseGuards(AppointmentAccessGuard)
+  @Post(':id/chat/token')
+  getChatToken(@Req() req, @Param('id') id: string) {
+    const user = req.user;
+    const uid = user.userId;
+    const channelName = `appointment_${id}`;
+    return this.appointmentsService.generateAgoraToken(channelName, uid);
   }
 }

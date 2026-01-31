@@ -24,11 +24,28 @@ async function bootstrap() {
     }),
   );
   //  CORS
-  const allowlist = new Set(['*']);
+  const allowlist = [
+    'http://localhost:3000',
+    'http://localhost:3030',
+    'http://localhost:3001',
+    'http://localhost:5173',
+    'http://localhost:5174',
+  ];
 
   app.enableCors({
     origin: (origin, cb) => {
-      if (!origin || allowlist.has(origin)) return cb(null, true);
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return cb(null, true);
+
+      // Allow all origins in development mode
+      if (process.env.NODE_ENV === 'development') {
+        return cb(null, true);
+      }
+
+      if (allowlist.includes(origin) || allowlist.includes('*')) {
+        return cb(null, true);
+      }
+
       return cb(new Error(`CORS blocked: ${origin}`), false);
     },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',

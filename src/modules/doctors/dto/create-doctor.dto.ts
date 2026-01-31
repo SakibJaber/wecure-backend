@@ -1,14 +1,15 @@
-import { IsNotEmpty, IsNumber } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateDoctorDto {
   @IsNotEmpty()
+  @IsString()
   currentOrganization: string;
 
   @IsNotEmpty()
+  @IsString()
   specialtyId: string;
 
-  @IsNumber()
-  consultationFee: number;
-
+  @IsOptional()
+  @IsString()
   about?: string;
 }

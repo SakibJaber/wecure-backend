@@ -10,6 +10,10 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { databaseConfig } from './config/database.config';
 import { CommonModule } from './common/common.module';
 import { awsConfig } from 'src/config/aws.config';
+import { AgoraModule } from './modules/agora/agora.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 const logger = new Logger('Database');
 
@@ -17,7 +21,7 @@ const logger = new Logger('Database');
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig,awsConfig],
+      load: [databaseConfig, awsConfig],
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
@@ -44,6 +48,10 @@ const logger = new Logger('Database');
     DomainModule,
     AuditLogsModule,
     CommonModule,
+    AgoraModule,
+    ScheduleModule.forRoot(),
+    EventEmitterModule.forRoot(),
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

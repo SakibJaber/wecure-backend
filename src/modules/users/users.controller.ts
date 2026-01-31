@@ -197,4 +197,28 @@ export class UsersController {
       };
     }
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('fcm-token')
+  async registerFcmToken(@Req() req, @Body() body: { token: string }) {
+    await this.usersService.registerFcmToken(req.user.userId, body.token);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'FCM token registered successfully',
+      data: null,
+    };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('fcm-token')
+  async removeFcmToken(@Req() req, @Body() body: { token: string }) {
+    await this.usersService.removeFcmToken(req.user.userId, body.token);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'FCM token removed successfully',
+      data: null,
+    };
+  }
 }

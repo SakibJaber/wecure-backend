@@ -11,9 +11,14 @@ import {
   DoctorExperience,
   DoctorExperienceSchema,
 } from './schemas/doctor-experience.schema';
+import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
 import { AvailabilityModule } from '../availability/availability.module';
 import { AppointmentsModule } from '../appointments/appointments.module';
 import { MailModule } from '../mail/mail.module';
+import { UsersModule } from '../users/users.module';
+import { DoctorAggregationHelper } from './helpers/doctor-aggregation.helper';
+import { DoctorRatingHelper } from './helpers/doctor-rating.helper';
+import { DoctorSlotsHelper } from './helpers/doctor-slots.helper';
 
 @Module({
   imports: [
@@ -21,13 +26,20 @@ import { MailModule } from '../mail/mail.module';
       { name: Doctor.name, schema: DoctorSchema },
       { name: DoctorService.name, schema: DoctorServiceSchema },
       { name: DoctorExperience.name, schema: DoctorExperienceSchema },
+      { name: Review.name, schema: ReviewSchema },
     ]),
     forwardRef(() => AvailabilityModule),
     forwardRef(() => AppointmentsModule),
     MailModule,
+    UsersModule,
   ],
   controllers: [DoctorsController],
-  providers: [DoctorsService],
+  providers: [
+    DoctorsService,
+    DoctorAggregationHelper,
+    DoctorRatingHelper,
+    DoctorSlotsHelper,
+  ],
   exports: [DoctorsService, MongooseModule],
 })
 export class DoctorsModule {}

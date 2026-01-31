@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Types, Document } from 'mongoose';
+import { AppointmentStatus } from 'src/common/enum/appointment-status.enum';
 
 export type AppointmentDocument = Appointment & Document;
 
@@ -34,17 +35,23 @@ export class Appointment {
   reasonDetails?: string;
 
   @Prop({
-    enum: ['UPCOMING', 'ONGOING', 'COMPLETED', 'CANCELLED'],
-    default: 'UPCOMING',
+    enum: Object.values(AppointmentStatus),
+    default: AppointmentStatus.UPCOMING,
     index: true,
   })
-  status: string;
+  status: AppointmentStatus;
 
   @Prop({ required: true })
   consultationFee: number;
 
   @Prop({ type: Types.ObjectId, ref: 'Payment' })
   paymentId?: Types.ObjectId;
+
+  @Prop({ default: false })
+  reminder6hSent: boolean;
+
+  @Prop({ default: false })
+  reminder1hSent: boolean;
 }
 
 export const AppointmentSchema = SchemaFactory.createForClass(Appointment);

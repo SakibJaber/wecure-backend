@@ -41,18 +41,42 @@ export class WellnessTipsService {
     return createdTip.save();
   }
 
-  async findAll(query: any) {
+  async findAll(query: any, userId?: string) {
     const page = parseInt(query.page) || 1;
     const limit = parseInt(query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const [data, total] = await Promise.all([
-      this.wellnessTipModel.find().skip(skip).limit(limit).exec(),
+    const [data, total]: [any[], number] = await Promise.all([
+      this.wellnessTipModel
+        .find()
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
       this.wellnessTipModel.countDocuments(),
     ]);
 
+    let tipsWithFavourite: any[] = data;
+    if (userId) {
+      const userLikes = await this.wellnessTipLikeModel.find({ userId });
+      const likedTipIds = new Set(
+        userLikes.map((like) => like.tipId.toString()),
+      );
+
+      tipsWithFavourite = data.map((tip) => ({
+        ...tip,
+        isFavourite: likedTipIds.has(tip._id.toString()),
+      }));
+    } else {
+      tipsWithFavourite = data.map((tip) => ({
+        ...tip,
+        isFavourite: false,
+      }));
+    }
+
     return {
-      data,
+      data: tipsWithFavourite,
       total,
       page,
       limit,
@@ -60,12 +84,25 @@ export class WellnessTipsService {
     };
   }
 
-  async findOne(id: string) {
-    const tip = await this.wellnessTipModel.findById(id).exec();
+  async findOne(id: string, userId?: string) {
+    const tip = await this.wellnessTipModel.findById(id).lean().exec();
     if (!tip) {
       throw new NotFoundException(`Wellness tip with ID ${id} not found`);
     }
-    return tip;
+
+    let isFavourite = false;
+    if (userId) {
+      const like = await this.wellnessTipLikeModel.findOne({
+        tipId: id,
+        userId,
+      });
+      isFavourite = !!like;
+    }
+
+    return {
+      ...tip,
+      isFavourite,
+    } as any;
   }
 
   async update(id: string, updateWellnessTipDto: UpdateWellnessTipDto) {

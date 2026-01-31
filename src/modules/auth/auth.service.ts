@@ -2,12 +2,13 @@ import {
   Injectable,
   UnauthorizedException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
-import { MailService } from '../mail/mail.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Role } from 'src/common/enum/role.enum';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -15,11 +16,12 @@ import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
-    private readonly mailService: MailService,
+    private readonly eventEmitter: EventEmitter2,
     @InjectModel(Doctor.name) private doctorModel: Model<DoctorDocument>,
   ) {}
 
@@ -35,12 +37,18 @@ export class AuthService {
       user._id.toString(),
       user.role,
       user.email,
+      user.doctorId,
     );
     await this.usersService.updateRefreshToken(
       user._id.toString(),
       tokens.refreshToken,
     );
-    return tokens;
+    return {
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      ...tokens,
+    };
   }
 
   async login(email: string, password: string) {
@@ -64,12 +72,18 @@ export class AuthService {
       user._id.toString(),
       user.role,
       user.email,
+      user.doctorId,
     );
     await this.usersService.updateRefreshToken(
       user._id.toString(),
       tokens.refreshToken,
     );
-    return tokens;
+    return {
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      ...tokens,
+    };
   }
 
   async resendRegistrationOtp(email: string) {
@@ -83,7 +97,7 @@ export class AuthService {
     }
 
     const otp = this.generateOtp();
-    const hashedOtp = await bcrypt.hash(otp, 12);
+    const hashedOtp = await bcrypt.hash(otp, 11);
     const expirationMinutes = parseInt(
       this.config.get<string>('OTP_EXPIRATION_MINUTES') || '15',
     );
@@ -95,13 +109,26 @@ export class AuthService {
       expiresAt,
     );
 
-    // Send OTP via email
-    await this.mailService.sendEmailVerificationOtp(email, otp);
+    // Emit event to send OTP via email
+    this.eventEmitter.emit('auth.registration_otp_sent', { email, otp });
 
     return {
       message: 'OTP resent to your email',
       otp: process.env.NODE_ENV === 'development' ? otp : undefined,
     };
+  }
+
+  async resendOtp(email: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (!user.isEmailVerified) {
+      return this.resendRegistrationOtp(email);
+    } else {
+      return this.sendPasswordResetOtp(email);
+    }
   }
 
   async logout(userId: string) {
@@ -132,10 +159,15 @@ export class AuthService {
     return tokens;
   }
 
-  private async generateToken(userId: string, role: string, email: string) {
-    let doctorId: string | null = null;
+  private async generateToken(
+    userId: string,
+    role: string,
+    email: string,
+    providedDoctorId?: string,
+  ) {
+    let doctorId: string | null = providedDoctorId || null;
 
-    if (role === Role.DOCTOR) {
+    if (!doctorId && role === Role.DOCTOR) {
       const doctor = await this.doctorModel.findOne({ userId });
       if (doctor) {
         doctorId = doctor._id.toString();
@@ -188,14 +220,18 @@ export class AuthService {
 
     // Generate OTP
     const otp = this.generateOtp();
-    const hashedOtp = await bcrypt.hash(otp, 12);
     const expirationMinutes = parseInt(
       this.config.get<string>('OTP_EXPIRATION_MINUTES') || '15',
     );
     const expiresAt = new Date(Date.now() + expirationMinutes * 60 * 1000);
 
-    // Create or update pending registration with hashed password
-    const hashedPassword = await bcrypt.hash(data.password, 12);
+    // Parallelize hashing and use 10 rounds for better performance
+    const [hashedOtp, hashedPassword] = await Promise.all([
+      bcrypt.hash(otp, 11),
+      bcrypt.hash(data.password, 11),
+    ]);
+
+    // Create or update pending registration
     await this.usersService.userModel.findOneAndUpdate(
       { email: data.email },
       {
@@ -211,8 +247,11 @@ export class AuthService {
       { upsert: true },
     );
 
-    // Send OTP via email
-    await this.mailService.sendEmailVerificationOtp(data.email, otp);
+    // Emit event to send OTP via email
+    this.eventEmitter.emit('auth.registration_otp_sent', {
+      email: data.email,
+      otp,
+    });
 
     return {
       message: 'OTP sent to your email',
@@ -240,13 +279,19 @@ export class AuthService {
       user._id.toString(),
       user.role,
       user.email,
+      user.doctorId,
     );
     await this.usersService.updateRefreshToken(
       user._id.toString(),
       tokens.refreshToken,
     );
 
-    return tokens;
+    return {
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      ...tokens,
+    };
   }
 
   async sendPasswordResetOtp(email: string) {
@@ -257,7 +302,7 @@ export class AuthService {
     }
 
     const otp = this.generateOtp();
-    const hashedOtp = await bcrypt.hash(otp, 12);
+    const hashedOtp = await bcrypt.hash(otp, 11);
     const expirationMinutes = parseInt(
       this.config.get<string>('OTP_EXPIRATION_MINUTES') || '15',
     );
@@ -265,8 +310,8 @@ export class AuthService {
 
     await this.usersService.savePasswordResetOtp(email, hashedOtp, expiresAt);
 
-    // Send OTP via email
-    await this.mailService.sendResetPasswordOtp(email, otp);
+    // Emit event to send OTP via email
+    this.eventEmitter.emit('auth.password_reset_otp_sent', { email, otp });
 
     return {
       message: 'If email exists, OTP has been sent',
@@ -274,13 +319,38 @@ export class AuthService {
     };
   }
 
-  async resetPassword(email: string, otp: string, newPassword: string) {
+  async verifyPasswordResetOtp(email: string, otp: string) {
     const isValid = await this.usersService.verifyPasswordResetOtp(email, otp);
     if (!isValid) {
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
-    await this.usersService.updatePassword(email, newPassword);
-    return { message: 'Password reset successfully' };
+    const payload = { email, type: 'password_reset' };
+    const resetToken = await this.jwtService.signAsync(payload, {
+      secret: this.config.get<string>('JWT_SECRET'),
+      expiresIn: '15m', // Reset token valid for 15 minutes
+    });
+
+    return {
+      message: 'OTP verified successfully',
+      resetToken,
+    };
+  }
+
+  async resetPassword(resetToken: string, newPassword: string) {
+    try {
+      const payload = await this.jwtService.verifyAsync(resetToken, {
+        secret: this.config.get<string>('JWT_SECRET'),
+      });
+
+      if (payload.type !== 'password_reset') {
+        throw new UnauthorizedException('Invalid reset token');
+      }
+
+      await this.usersService.updatePassword(payload.email, newPassword);
+      return { message: 'Password reset successfully' };
+    } catch (error) {
+      throw new UnauthorizedException('Invalid or expired reset token');
+    }
   }
 }

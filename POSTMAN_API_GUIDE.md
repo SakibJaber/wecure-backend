@@ -1,0 +1,1121 @@
+﻿# Postman API Guide
+
+This guide documents the API endpoints for the WeCure Backend.
+
+## Base URL
+
+`http://localhost:3000` (or your deployed URL)
+
+## Authentication
+
+Most endpoints require a Bearer Token.
+
+1. Login via `POST /auth/login` to get a token.
+2. In Postman, go to the **Authorization** tab.
+3. Select **Bearer Token**.
+4. Paste the `accessToken`.
+
+---
+
+## Auth Module
+
+### Register
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/auth/register`
+- **Description:** Register a new user (Patient or Doctor).
+- **Body:**
+
+```json
+{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "password": "password123",
+  "role": "patient", // or "doctor"
+  "doctorId": "12345" // Required if role is "doctor"
+}
+```
+
+### Login
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/auth/login`
+- **Description:** Login with email and password.
+- **Body:**
+
+```json
+{
+  "email": "john@example.com",
+  "password": "password123"
+}
+```
+
+### Refresh Token
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/auth/refresh`
+- **Description:** Refresh access token using refresh token.
+- **Headers:**
+  - `Authorization`: `Bearer <refreshToken>`
+
+### Logout
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/auth/logout`
+- **Description:** Logout the user.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Resend OTP
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/auth/resend-otp`
+- **Description:** Resend registration OTP.
+- **Body:**
+
+```json
+{
+  "email": "john@example.com"
+}
+```
+
+### Verify Registration OTP
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/auth/verify-reg-otp`
+- **Description:** Verify the OTP sent during registration.
+- **Body:**
+
+```json
+{
+  "email": "john@example.com",
+  "otp": "123456"
+}
+```
+
+### Send Reset Password OTP
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/auth/send-reset-otp`
+- **Description:** Send OTP for password reset.
+- **Body:**
+
+```json
+{
+  "email": "john@example.com"
+}
+```
+
+### Reset Password
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/auth/reset-password`
+- **Description:** Reset password using OTP.
+- **Body:**
+
+```json
+{
+  "email": "john@example.com",
+  "otp": "123456",
+  "newPassword": "newpassword123"
+}
+```
+
+## Users Module
+
+### Get Profile
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/users/me`
+- **Description:** Get current user's profile.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Update Profile
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/users/profile`
+- **Description:** Update current user's profile. Supports image upload.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+  - `Content-Type`: `multipart/form-data`
+- **Body:**
+  - `name`: (text)
+  - `phone`: (text)
+  - `dateOfBirth`: (text, ISO8601)
+  - `image`: (file)
+
+### Change Password
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/users/change-password`
+- **Description:** Change current user's password.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "oldPassword": "oldpassword123",
+  "newPassword": "newpassword123"
+}
+```
+
+### Delete Account
+
+- **Method:** `DELETE`
+- **URL:** `{{baseUrl}}/users/profile`
+- **Description:** Delete current user's account.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Register FCM Token
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/users/fcm-token`
+- **Description:** Register a device token for push notifications.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "token": "fcm_device_token_here"
+}
+```
+
+### Remove FCM Token
+
+- **Method:** `DELETE`
+- **URL:** `{{baseUrl}}/users/fcm-token`
+- **Description:** Remove a device token (e.g., on logout).
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "token": "fcm_device_token_here"
+}
+```
+
+### Get All Users (Admin)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/users`
+- **Description:** Get all users. Admin only.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Query Params:**
+  - `page`: (number)
+  - `limit`: (number)
+  - `search`: (string)
+  - `role`: (string)
+
+### Toggle User Status (Admin)
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/users/:id/toggle-status`
+- **Description:** Block/Unblock a user. Admin only.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Change User Role (Admin)
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/users/:id/role`
+- **Description:** Change a user's role. Admin only.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "role": "admin" // or "doctor", "patient"
+}
+```
+
+## Doctors Module
+
+### Create Doctor Profile
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/doctors/me/profile`
+- **Description:** Create a doctor profile for the current user.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "currentOrganization": "City Hospital",
+  "specialtyId": "specialty_id_here",
+  "about": "Experienced cardiologist..."
+}
+```
+
+### Get My Doctor Profile
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/doctors/me/profile`
+- **Description:** Get the current doctor's profile.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Add Service
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/doctors/me/services`
+- **Description:** Add a service to the doctor's profile.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "name": "General Consultation"
+}
+```
+
+### Remove Service
+
+- **Method:** `DELETE`
+- **URL:** `{{baseUrl}}/doctors/me/services/:id`
+- **Description:** Remove a service from the doctor's profile.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Upload Verification Document
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/doctors/me/documents`
+- **Description:** Upload a verification document (PDF, JPG, PNG). Max 10MB.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+  - `Content-Type`: `multipart/form-data`
+- **Body:**
+  - `document`: (file)
+
+### Add Experience
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/doctors/me/experiences`
+- **Description:** Add work experience.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "organizationName": "General Hospital",
+  "designation": "Senior Resident",
+  "startDate": "2020-01-01",
+  "endDate": "2023-01-01", // Optional
+  "isCurrent": false // Optional
+}
+```
+
+### Get All Doctors (Admin)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/doctors/admin/all`
+- **Description:** Get all doctors with pagination and filtering. Admin only.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Query Params:**
+  - `page`: (number)
+  - `limit`: (number)
+  - `search`: (string)
+  - `status`: (string) - PENDING, VERIFIED, REJECTED, SUSPENDED
+
+### Update Verification Status (Admin)
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/doctors/:id/status`
+- **Description:** Update a doctor's verification status. Admin only.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "status": "VERIFIED", // PENDING, VERIFIED, REJECTED, SUSPENDED
+  "note": "Documents verified." // Optional
+}
+```
+
+### Get Public Doctor Profile
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/doctors/:id/public`
+- **Description:** Get a doctor's public profile with services, experiences, reviews, and availability.
+- **Response includes:**
+  - Doctor details
+  - Services offered
+  - Work experiences
+  - Reviews and ratings
+  - Availability schedule (for calendar highlighting)
+
+### Get Doctors by Specialty
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/doctors/specialty/:specialtyId`
+- **Description:** Get all verified doctors for a specific specialty. Includes `minFee` and `nextAvailableSlots` for quick booking.
+- **Response Example:**
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Doctors fetched successfully",
+  "data": [
+    {
+      "_id": "6968879f78dbe211a6ba4029",
+      "name": "dr Uno",
+      "profileImage": "https://...",
+      "specialty": "Cardiology",
+      "currentOrganization": "City General Hospital",
+      "experienceYears": 12,
+      "averageRating": 5,
+      "totalReviews": 2,
+      "minFee": 20,
+      "nextAvailableSlots": [
+        {
+          "date": "2026-01-28",
+          "day": "WEDNESDAY",
+          "slots": ["09:00", "09:30", "10:00", "10:30", "11:00"],
+          "totalSlots": 12
+        },
+        {
+          "date": "2026-01-30",
+          "day": "FRIDAY",
+          "slots": ["09:00", "09:30", "10:00", "10:30", "11:00"],
+          "totalSlots": 12
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Get Popular Doctors
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/doctors/popular`
+- **Description:** Get doctors with rating >= 4.0, sorted by rating.
+
+---
+
+## 🔄 Complete Booking Flow
+
+### Step 1: Browse Doctors by Specialty
+
+**Endpoint:** `GET /doctors/specialty/:specialtyId`
+
+- Shows list of doctors with `nextAvailableSlots` (next 3 days)
+- Patient can book directly from quick slots
+
+### Step 2a: Quick Book (from list view)
+
+**Endpoint:** `POST /appointments`
+
+- Use `doctorId`, `specialtyId`, `date`, and `time` from the list response
+
+### Step 2b: View All Slots (calendar view)
+
+**Endpoint:** `GET /doctors/:id/public`
+
+- Get full availability rules to highlight available days on calendar
+
+### Step 3: Select Specific Date
+
+**Endpoint:** `GET /appointments/available-slots?doctorId=...&date=2026-01-28`
+
+- Shows all time slots for that specific date
+- Marks each slot as `isAvailable: true/false`
+
+### Step 4: Create Appointment
+
+**Endpoint:** `POST /appointments`
+
+- Creates appointment with status `UPCOMING`
+- Returns `appointmentId`
+
+### Step 5: Initialize Payment
+
+**Endpoint:** `POST /payments/appointments/:appointmentId/initialize`
+
+- Returns Paystack payment URL
+- Patient completes payment
+- Webhook updates appointment status to `PAID`
+
+---
+
+## Appointments Module
+
+### Create Appointment (Patient)
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/appointments`
+- **Description:** Create a new appointment.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "doctorId": "doctor_id_here",
+  "specialistId": "specialist_id_here",
+  "appointmentDate": "2023-10-27",
+  "appointmentTime": "10:00",
+  "reasonTitle": "Checkup",
+  "reasonDetails": "Feeling unwell",
+  "attachmentIds": ["attachment_id_1"] // Optional
+}
+```
+
+### Get My Appointments (Patient)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/appointments/me`
+- **Description:** Get all appointments for the current patient.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Get Available Slots
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/appointments/available-slots`
+- **Description:** Get available time slots for a doctor on a specific date.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Query Params:**
+  - `doctorId`: (string)
+  - `date`: (string, YYYY-MM-DD)
+
+### Get Doctor Appointments (Doctor)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/appointments/doctor`
+- **Description:** Get all appointments for the current doctor.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Update Appointment Status
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/appointments/:id/status`
+- **Description:** Update appointment status (CANCELLED, COMPLETED).
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "status": "CANCELLED"
+}
+```
+
+### Add Attachment
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/appointments/:id/attachments`
+- **Description:** Add an attachment to an appointment.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "fileKey": "s3_file_key",
+  "fileType": "image/png"
+}
+```
+
+### Get Video Token
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/appointments/:id/video/token`
+- **Description:** Get an Agora video token for the appointment. Requires appointment to be ONGOING and within time window.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Get Chat Token
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/appointments/:id/chat/token`
+- **Description:** Get an Agora chat token for the appointment. Requires appointment to be ONGOING and within time window.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+## Availability Module
+
+### Create Availability
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/doctors/me/availability`
+- **Description:** Create availability slots for specific days.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "days": ["MONDAY", "WEDNESDAY"],
+  "slotSizeMinutes": 30,
+  "startTime": "09:00",
+  "endTime": "17:00",
+  "fee": 500
+}
+```
+
+### Get My Availability
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/doctors/me/availability`
+- **Description:** Get the current doctor's availability.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Toggle Availability
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/doctors/me/availability/:id`
+- **Description:** Enable or disable an availability slot.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "isActive": false
+}
+```
+
+### Remove Availability
+
+- **Method:** `DELETE`
+- **URL:** `{{baseUrl}}/doctors/me/availability/:id`
+- **Description:** Delete an availability slot.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+## Reviews Module
+
+### Create Review
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/reviews`
+- **Description:** Create a new review.
+- **Body:**
+
+```json
+{
+  "appointmentId": "appointment_id_here",
+  "userId": "user_id_here",
+  "doctorId": "doctor_id_here",
+  "rating": 5,
+  "reviewText": "Great experience!"
+}
+```
+
+### Get All Reviews
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/reviews`
+- **Description:** Get all reviews.
+- **Query Params:**
+  - `page`: (number)
+  - `limit`: (number)
+
+### Get Review by ID
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/reviews/:id`
+- **Description:** Get a single review by ID.
+
+### Update Review
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/reviews/:id`
+- **Description:** Update a review.
+- **Body:**
+
+```json
+{
+  "rating": 4,
+  "reviewText": "Updated review text"
+}
+```
+
+### Delete Review
+
+- **Method:** `DELETE`
+- **URL:** `{{baseUrl}}/reviews/:id`
+- **Description:** Delete a review.
+
+## Uploads Module
+
+### Presign Upload URL
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/uploads/presign`
+- **Description:** Get a presigned URL for uploading a file to S3.
+- **Body:**
+
+```json
+{
+  "mimeType": "image/jpeg",
+  "folder": "profiles" // appointments, verifications, profiles
+}
+```
+
+### Get View URL
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/uploads/view`
+- **Description:** Get a presigned URL for viewing a private file.
+- **Query Params:**
+  - `key`: (string) S3 file key
+
+## Specialist Module
+
+### Create Specialist (Admin)
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/specialist`
+- **Description:** Create a new specialist category.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+  - `Content-Type`: `multipart/form-data`
+- **Body:**
+  - `name`: (text)
+  - `description`: (text)
+  - `image`: (file)
+  - `isActive`: (text, boolean)
+
+### Get All Specialists
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/specialist`
+- **Description:** Get all specialist categories. Public endpoint.
+- **Query Params:**
+  - `page`: (number)
+  - `limit`: (number)
+  - `search`: (string)
+
+### Get Specialist by ID
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/specialist/:id`
+- **Description:** Get a single specialist category by ID. Public endpoint.
+
+### Update Specialist (Admin)
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/specialist/:id`
+- **Description:** Update a specialist category.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+  - `Content-Type`: `multipart/form-data`
+- **Body:**
+  - `name`: (text)
+  - `description`: (text)
+  - `image`: (file)
+  - `isActive`: (text, boolean)
+
+### Delete Specialist (Admin)
+
+- **Method:** `DELETE`
+- **URL:** `{{baseUrl}}/specialist/:id`
+- **Description:** Delete a specialist category.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+## Wellness Tips Module
+
+### Create Wellness Tip (Admin)
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/wellness-tips`
+- **Description:** Create a new wellness tip.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "content": "Stay hydrated...",
+  "isActive": true
+}
+```
+
+### Get All Wellness Tips
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/wellness-tips`
+- **Description:** Get all wellness tips. Returns `isFavourite: true` if the user is authenticated and has liked the tip.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>` (Optional)
+- **Query Params:**
+  - `page`: (number)
+  - `limit`: (number)
+  - `search`: (string)
+
+### Get Wellness Tip by ID
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/wellness-tips/:id`
+- **Description:** Get a single wellness tip by ID. Returns `isFavourite: true` if the user is authenticated and has liked the tip.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>` (Optional)
+
+### Update Wellness Tip (Admin)
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/wellness-tips/:id`
+- **Description:** Update a wellness tip.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "content": "Drink More Water"
+}
+```
+
+### Delete Wellness Tip (Admin)
+
+- **Method:** `DELETE`
+- **URL:** `{{baseUrl}}/wellness-tips/:id`
+- **Description:** Delete a wellness tip.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Toggle Like
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/wellness-tips/:id/like`
+- **Description:** Like or unlike a wellness tip.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+## Donations Module
+
+### Create Donation (Internal/Admin)
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/donations`
+- **Description:** Create a new donation record manually.
+- **Body:**
+
+```json
+{
+  "userId": "user_id_here",
+  "paystackReference": "ref_123456",
+  "amount": 1000,
+  "currency": "NGN",
+  "status": "PENDING" // PENDING, PAID, FAILED
+}
+```
+
+### Get All Donations
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/donations`
+- **Description:** Get all donations.
+- **Query Params:**
+  - `page`: (number)
+  - `limit`: (number)
+
+### Get Donation by ID
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/donations/:id`
+- **Description:** Get a single donation by ID.
+
+### Update Donation
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/donations/:id`
+- **Description:** Update a donation.
+- **Body:**
+
+```json
+{
+  "amount": 2000
+}
+```
+
+### Delete Donation
+
+- **Method:** `DELETE`
+- **URL:** `{{baseUrl}}/donations/:id`
+- **Description:** Delete a donation.
+
+## Contact Support Module
+
+### Create Support Message (Doctor)
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/contact`
+- **Description:** Send a support message.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "name": "Dr. Smith",
+  "email": "smith@example.com",
+  "message": "I need help with..."
+}
+```
+
+### Get All Support Messages (Admin)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/contact`
+- **Description:** Get all support messages.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Query Params:**
+  - `page`: (number)
+  - `limit`: (number)
+
+### Get My Messages (Doctor)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/contact/my-messages`
+- **Description:** Get current doctor's support messages.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Get Support Message by ID
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/contact/:id`
+- **Description:** Get a single support message by ID.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Update Support Message (Admin)
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/contact/:id`
+- **Description:** Update support message status or add admin response.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "status": "RESOLVED", // PENDING, IN_PROGRESS, RESOLVED
+  "adminResponse": "We have fixed the issue."
+}
+```
+
+### Delete Support Message (Admin)
+
+- **Method:** `DELETE`
+- **URL:** `{{baseUrl}}/contact/:id`
+- **Description:** Delete a support message.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+## Audit Logs Module
+
+### Get Audit Logs (Admin)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/admin/audit-logs`
+- **Description:** Get audit logs with filtering.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Query Params:**
+  - `userId`: (string)
+  - `action`: (string)
+  - `from`: (date)
+  - `to`: (date)
+  - `page`: (number)
+  - `limit`: (number)
+
+## Chat Module
+
+### Send Message
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/chat`
+- **Description:** Send a chat message.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "appointmentId": "appointment_id_here",
+  "senderId": "user_id_here",
+  "senderRole": "USER", // USER, DOCTOR
+  "message": "Hello doctor!"
+}
+```
+
+### Get My Chats
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/chat`
+- **Description:** Get all chats for the current user.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Get Chats by Appointment
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/chat/appointment/:appointmentId`
+- **Description:** Get all messages for a specific appointment.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Get Message by ID
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/chat/:id`
+- **Description:** Get a single chat message by ID.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Update Message
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/chat/:id`
+- **Description:** Update a chat message.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "message": "Updated message content"
+}
+```
+
+### Delete Message
+
+- **Method:** `DELETE`
+- **URL:** `{{baseUrl}}/chat/:id`
+- **Description:** Delete a chat message.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+## Payments Module
+
+### Initialize Appointment Payment
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/payments/appointments/:appointmentId/initialize`
+- **Description:** Initialize a Paystack payment for a doctor consultation.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Response:**
+
+```json
+{
+  "authorization_url": "https://checkout.paystack.com/...",
+  "reference": "..."
+}
+```
+
+### Initialize Donation Payment
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/payments/donations/initialize`
+- **Description:** Initialize a Paystack payment for a donation.
+- **Body:**
+
+```json
+{
+  "email": "donor@example.com",
+  "amount": 5000,
+  "userId": "optional_user_id"
+}
+```
+
+- **Response:**
+
+```json
+{
+  "authorization_url": "https://checkout.paystack.com/...",
+  "reference": "..."
+}
+```
+
+### Paystack Webhook
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/payments/webhook/paystack`
+- **Description:** Paystack webhook endpoint for payment verification.
+- **Headers:**
+  - `x-paystack-signature`: `<hmac-sha512-signature>`
+- **Body:** Paystack webhook payload.
+
+---
+
+## Legal Content Module
+
+### Get Terms and Conditions
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/legal-content/terms-and-conditions`
+- **Description:** Get the Terms and Conditions. Public endpoint.
+
+### Get Privacy Policy
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/legal-content/privacy-policy`
+- **Description:** Get the Privacy Policy. Public endpoint.
+
+### Update Legal Content (Admin)
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/legal-content`
+- **Description:** Update Terms and Conditions or Privacy Policy. Admin only.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "type": "terms_and_conditions", // or "privacy_policy"
+  "content": "Updated content here..."
+}
+```
+
+## Notifications Module
+
+### Get My Notifications
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/notifications`
+- **Description:** Get all notifications for the current user.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Query Params:**
+  - `page`: (number)
+  - `limit`: (number)
+
+### Mark Notification as Read
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/notifications/:id/read`
+- **Description:** Mark a specific notification as read.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Mark All Notifications as Read
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/notifications/read-all`
+- **Description:** Mark all notifications for the current user as read.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`

@@ -229,7 +229,6 @@ describe('AppointmentsService - Availability', () => {
       select: jest.fn().mockReturnThis(),
       lean: jest.fn().mockResolvedValue({
         _id: mockDoctorId,
-        consultationFee: 100,
       }),
     });
     (availabilityService.getByDoctor as jest.Mock).mockResolvedValue([
@@ -238,6 +237,7 @@ describe('AppointmentsService - Availability', () => {
         isActive: true,
         startTime: '09:00',
         endTime: '17:00',
+        fee: 100,
       },
     ]);
     appointmentModel.findOne.mockReturnValue({

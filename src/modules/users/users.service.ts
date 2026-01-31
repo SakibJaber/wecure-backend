@@ -60,7 +60,7 @@ export class UsersService {
 
   async updateRefreshToken(userId: string, refreshToken: string | null) {
     const hashedRefreshToken = refreshToken
-      ? await bcrypt.hash(refreshToken, 12)
+      ? await bcrypt.hash(refreshToken, 11)
       : null;
     await this.userModel.findByIdAndUpdate(userId, {
       refreshToken: hashedRefreshToken,
@@ -270,5 +270,21 @@ export class UsersService {
 
   async changeRole(userId: string, role: string) {
     return this.userModel.findByIdAndUpdate(userId, { role }, { new: true });
+  }
+
+  async registerFcmToken(userId: string, token: string) {
+    return this.userModel.findByIdAndUpdate(
+      userId,
+      { $addToSet: { fcmTokens: token } },
+      { new: true },
+    );
+  }
+
+  async removeFcmToken(userId: string, token: string) {
+    return this.userModel.findByIdAndUpdate(
+      userId,
+      { $pull: { fcmTokens: token } },
+      { new: true },
+    );
   }
 }

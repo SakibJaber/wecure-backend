@@ -17,6 +17,7 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { Role } from 'src/common/enum/role.enum';
+import { OptionalJwtAuthGuard } from 'src/common/guards/optional-jwt-auth.guard';
 
 @Controller('wellness-tips')
 export class WellnessTipsController {
@@ -69,10 +70,15 @@ export class WellnessTipsController {
     }
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get()
-  async findAll(@Query() query) {
+  async findAll(@Query() query, @Req() req) {
     try {
-      const { data, ...meta } = await this.wellnessTipsService.findAll(query);
+      const userId = req.user?.userId;
+      const { data, ...meta } = await this.wellnessTipsService.findAll(
+        query,
+        userId,
+      );
       return {
         success: true,
         statusCode: 200,
@@ -90,10 +96,12 @@ export class WellnessTipsController {
     }
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: string, @Req() req) {
     try {
-      const result = await this.wellnessTipsService.findOne(id);
+      const userId = req.user?.userId;
+      const result = await this.wellnessTipsService.findOne(id, userId);
       return {
         success: true,
         statusCode: 200,

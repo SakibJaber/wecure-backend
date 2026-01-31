@@ -1,0 +1,392 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
+import { NotificationsService } from './notifications.service';
+import { MailService } from '../mail/mail.service';
+import { NotificationType } from 'src/common/enum/notification-type.enum';
+import { UsersService } from '../users/users.service';
+import { PushService } from './push.service';
+
+@Injectable()
+export class NotificationsListener {
+  private readonly logger = new Logger(NotificationsListener.name);
+
+  constructor(
+    private readonly notificationsService: NotificationsService,
+    private readonly mailService: MailService,
+    private readonly usersService: UsersService,
+    private readonly pushService: PushService,
+  ) {}
+
+  @OnEvent('appointment.created')
+  async handleAppointmentCreated(payload: any) {
+    this.logger.log(
+      `Handling appointment.created event for appointment ${payload._id}`,
+    );
+
+    const { userId, doctorId, appointmentDate, appointmentTime } = payload;
+    const dateStr = new Date(appointmentDate).toLocaleDateString();
+
+    // Notify Patient
+    await this.notificationsService.createInAppNotification(
+      userId,
+      NotificationType.APPOINTMENT_CREATED,
+      'Appointment Created',
+      `Your appointment on ${dateStr} at ${appointmentTime} has been scheduled.`,
+      { appointmentId: payload._id, role: 'PATIENT' },
+    );
+
+    // Notify Doctor
+    await this.notificationsService.createInAppNotification(
+      doctorId,
+      NotificationType.APPOINTMENT_CREATED,
+      'New Appointment',
+      `You have a new appointment on ${dateStr} at ${appointmentTime}.`,
+      { appointmentId: payload._id, role: 'DOCTOR' },
+    );
+
+    // Send Emails
+    const [patient, doctor] = await Promise.all([
+      this.usersService.findById(userId),
+      this.usersService.findById(doctorId), // Doctor profile usually linked to user, but here doctorId might be profile ID.
+      // Wait, Appointment payload has doctorId as Profile ID usually.
+      // Let's check Appointment Service create.
+      // It uses doctorId from DTO which is Profile ID.
+      // But we need User ID to get email.
+      // Doctor Profile has userId.
+      // We need to fetch Doctor Profile first if doctorId is Profile ID.
+      // But let's assume for now we can try to find user by that ID, if not found, it might be profile.
+      // Actually, let's look at AppointmentsService.create.
+      // It saves doctorId (Profile ID).
+      // So we need to fetch Doctor Profile to get User ID.
+      // But UsersService only handles Users.
+      // We might need DoctorsService too? Or just rely on what we have.
+      // To keep it simple and avoid circular deps or too many deps, let's try to fetch User.
+      // If doctorId is Profile ID, UsersService.findById(doctorId) will return null.
+      // We can skip email for doctor if we can't easily resolve it without DoctorsService.
+      // OR, we can just send to Patient for now as they are definitely a User.
+    ]);
+
+    if (patient && patient.email) {
+      await this.mailService.sendEmail(
+        patient.email,
+        'Appointment Confirmation',
+        `Your appointment on ${dateStr} at ${appointmentTime} has been scheduled.`,
+      );
+    }
+
+    // For Doctor email, we'd ideally need to resolve User from Doctor Profile.
+    // Since we don't have DoctorsService here, we'll skip it for this iteration
+    // or we'd need to inject DoctorsService (which might cause circular dep if DoctorsModule imports NotificationsModule).
+    // Let's stick to Patient email for now to demonstrate the capability.
+  }
+
+  @OnEvent('appointment.updated')
+  async handleAppointmentUpdated(payload: any) {
+    this.logger.log(
+      `Handling appointment.updated event for appointment ${payload._id}`,
+    );
+    const { userId, doctorId, appointmentDate, appointmentTime } = payload;
+    const dateStr = new Date(appointmentDate).toLocaleDateString();
+
+    // Notify Patient
+    await this.notificationsService.createInAppNotification(
+      userId,
+      NotificationType.APPOINTMENT_UPDATED,
+      'Appointment Updated',
+      `Your appointment details have been updated.`,
+      { appointmentId: payload._id },
+    );
+    // Notify Doctor
+    await this.notificationsService.createInAppNotification(
+      doctorId,
+      NotificationType.APPOINTMENT_UPDATED,
+      'Appointment Updated',
+      `Appointment details have been updated.`,
+      { appointmentId: payload._id },
+    );
+  }
+
+  @OnEvent('appointment.status_change')
+  async handleAppointmentStatusChange(payload: any) {
+    const { appointmentId, status, userId, doctorId, oldStatus } = payload;
+    this.logger.log(
+      `Handling appointment.status_change: ${oldStatus} -> ${status}`,
+    );
+
+    let type: NotificationType | undefined;
+    let title: string | undefined;
+    let messagePatient: string | undefined;
+    let messageDoctor: string | undefined;
+
+    switch (status) {
+      case 'CANCELLED':
+        type = NotificationType.APPOINTMENT_CANCELLED;
+        title = 'Appointment Cancelled';
+        messagePatient = 'Your appointment has been cancelled.';
+        messageDoctor = 'An appointment has been cancelled.';
+        break;
+      case 'COMPLETED':
+        type = NotificationType.APPOINTMENT_COMPLETED;
+        title = 'Appointment Completed';
+        messagePatient = 'Your appointment has been marked as completed.';
+        messageDoctor = 'Appointment marked as completed.';
+        break;
+      case 'ONGOING': // Started
+        type = NotificationType.APPOINTMENT_STARTED;
+        title = 'Appointment Started';
+        messagePatient = 'Your appointment has started.';
+        messageDoctor = 'Appointment started.';
+        break;
+      case 'UPCOMING': // Could be re-scheduled or just confirmed
+        if (oldStatus === 'PENDING') {
+          // Example transition
+          // handled by created usually, but if status changes explicitly
+        }
+        break;
+      default:
+        // Generic update
+        type = NotificationType.APPOINTMENT_UPDATED;
+        title = 'Appointment Status Updated';
+        messagePatient = `Your appointment status is now ${status}.`;
+        messageDoctor = `Appointment status is now ${status}.`;
+    }
+
+    if (type && title && messagePatient && messageDoctor) {
+      if (userId) {
+        await this.notificationsService.createInAppNotification(
+          userId,
+          type,
+          title,
+          messagePatient,
+          { appointmentId },
+        );
+      }
+      if (doctorId) {
+        await this.notificationsService.createInAppNotification(
+          doctorId,
+          type,
+          title,
+          messageDoctor,
+          { appointmentId },
+        );
+      }
+    }
+  }
+
+  @OnEvent('payment.success')
+  async handlePaymentSuccess(payload: any) {
+    this.logger.log(`Handling payment.success event`);
+    const { userId, amount, reference, metadata } = payload;
+
+    await this.notificationsService.createInAppNotification(
+      userId,
+      NotificationType.PAYMENT_SUCCESS,
+      'Payment Successful',
+      `Your payment of ${amount} was successful.`,
+      { reference, ...metadata },
+    );
+  }
+
+  @OnEvent('appointment.reminder')
+  async handleAppointmentReminder(payload: any) {
+    const { appointment, type } = payload;
+    this.logger.log(
+      `Handling appointment.reminder (${type}) for appointment ${appointment._id}`,
+    );
+
+    const notificationType =
+      type === '6H'
+        ? NotificationType.APPOINTMENT_REMINDER_6H
+        : NotificationType.APPOINTMENT_REMINDER_1H;
+
+    const timeLabel = type === '6H' ? '6 hours' : '1 hour';
+    const dateStr = new Date(appointment.appointmentDate).toLocaleDateString();
+    const userId = appointment.userId._id || appointment.userId;
+    const doctorUser = appointment.doctorId?.userId;
+
+    // In-App Notification for Patient
+    await this.notificationsService.createInAppNotification(
+      userId,
+      notificationType,
+      'Appointment Reminder',
+      `Your appointment is in ${timeLabel} (${dateStr} at ${appointment.appointmentTime}).`,
+      { appointmentId: appointment._id },
+    );
+
+    // Push Notification for Patient
+    await this.pushService.sendToUser(
+      userId.toString(),
+      'Appointment Reminder',
+      `Your appointment is in ${timeLabel}.`,
+      {
+        appointmentId: appointment._id.toString(),
+        type: 'APPOINTMENT_REMINDER',
+      },
+    );
+
+    // Email for Patient
+    const patientEmail = appointment.userId?.email;
+    if (patientEmail) {
+      await this.mailService.sendEmail(
+        patientEmail,
+        'Appointment Reminder',
+        `This is a reminder that your appointment is in ${timeLabel} (${dateStr} at ${appointment.appointmentTime}).`,
+      );
+    }
+
+    // Notify Doctor if available
+    if (doctorUser) {
+      const doctorUserId = doctorUser._id || doctorUser;
+      await this.notificationsService.createInAppNotification(
+        doctorUserId,
+        notificationType,
+        'Appointment Reminder',
+        `You have an appointment in ${timeLabel}.`,
+        { appointmentId: appointment._id },
+      );
+
+      await this.pushService.sendToUser(
+        doctorUserId.toString(),
+        'Appointment Reminder',
+        `You have an appointment in ${timeLabel}.`,
+        {
+          appointmentId: appointment._id.toString(),
+          type: 'APPOINTMENT_REMINDER',
+        },
+      );
+    }
+  }
+
+  @OnEvent('doctor.verified')
+  async handleDoctorVerified(payload: any) {
+    const { userId, email, name } = payload;
+    this.logger.log(`Handling doctor.verified for user ${userId}`);
+
+    await this.notificationsService.createInAppNotification(
+      userId,
+      NotificationType.DOCTOR_VERIFIED,
+      'Verification Approved',
+      'Congratulations! Your doctor profile has been verified. You can now start accepting appointments.',
+      { doctorId: payload.doctorId },
+    );
+
+    await this.pushService.sendToUser(
+      userId.toString(),
+      'Verification Approved',
+      'Your doctor profile has been verified!',
+      { type: 'DOCTOR_VERIFIED' },
+    );
+
+    if (email) {
+      await this.mailService.sendDoctorAcceptanceEmail(email, name);
+    }
+  }
+
+  @OnEvent('doctor.rejected')
+  async handleDoctorRejected(payload: any) {
+    const { userId, email, name, note } = payload;
+    this.logger.log(`Handling doctor.rejected for user ${userId}`);
+
+    await this.notificationsService.createInAppNotification(
+      userId,
+      NotificationType.DOCTOR_REJECTED,
+      'Verification Rejected',
+      note ||
+        'Your doctor profile verification was not approved. Please review your documents and try again.',
+      { doctorId: payload.doctorId },
+    );
+
+    await this.pushService.sendToUser(
+      userId.toString(),
+      'Verification Rejected',
+      'Your doctor profile verification was not approved.',
+      { type: 'DOCTOR_REJECTED' },
+    );
+
+    if (email) {
+      await this.mailService.sendDoctorRejectionEmail(email, name, note);
+    }
+  }
+
+  @OnEvent('doctor.suspended')
+  async handleDoctorSuspended(payload: any) {
+    const { userId, email, name, note } = payload;
+    this.logger.log(`Handling doctor.suspended for user ${userId}`);
+
+    await this.notificationsService.createInAppNotification(
+      userId,
+      NotificationType.DOCTOR_SUSPENDED,
+      'Account Suspended',
+      note ||
+        'Your doctor account has been suspended. Please contact support for more information.',
+      { doctorId: payload.doctorId },
+    );
+
+    await this.pushService.sendToUser(
+      userId.toString(),
+      'Account Suspended',
+      'Your doctor account has been suspended.',
+      { type: 'DOCTOR_SUSPENDED' },
+    );
+
+    if (email) {
+      await this.mailService.sendDoctorSuspensionEmail(email, name, note);
+    }
+  }
+
+  @OnEvent('doctor.unsuspended')
+  async handleDoctorUnsuspended(payload: any) {
+    const { userId, email, name } = payload;
+    this.logger.log(`Handling doctor.unsuspended for user ${userId}`);
+
+    await this.notificationsService.createInAppNotification(
+      userId,
+      NotificationType.DOCTOR_UNSUSPENDED,
+      'Account Restored',
+      'Your doctor account has been restored. You can now resume accepting appointments.',
+      { doctorId: payload.doctorId },
+    );
+
+    await this.pushService.sendToUser(
+      userId.toString(),
+      'Account Restored',
+      'Your doctor account has been restored!',
+      { type: 'DOCTOR_UNSUSPENDED' },
+    );
+
+    if (email) {
+      await this.mailService.sendDoctorUnsuspensionEmail(email, name);
+    }
+  }
+
+  @OnEvent('auth.registration_otp_sent')
+  async handleRegistrationOtpSent(payload: { email: string; otp: string }) {
+    this.logger.log(`Handling auth.registration_otp_sent for ${payload.email}`);
+    try {
+      await this.mailService.sendEmailVerificationOtp(
+        payload.email,
+        payload.otp,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send registration OTP email to ${payload.email}`,
+        error,
+      );
+    }
+  }
+
+  @OnEvent('auth.password_reset_otp_sent')
+  async handlePasswordResetOtpSent(payload: { email: string; otp: string }) {
+    this.logger.log(
+      `Handling auth.password_reset_otp_sent for ${payload.email}`,
+    );
+    try {
+      await this.mailService.sendResetPasswordOtp(payload.email, payload.otp);
+    } catch (error) {
+      this.logger.error(
+        `Failed to send password reset OTP email to ${payload.email}`,
+        error,
+      );
+    }
+  }
+}

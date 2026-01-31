@@ -7,14 +7,17 @@ import {
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
 import { Appointment, AppointmentDocument } from './schemas/appointment.schema';
+import { AppointmentStatus } from 'src/common/enum/appointment-status.enum';
 import {
   AppointmentAttachment,
   AttachmentDocument,
 } from './schemas/attachment.schema';
 import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
 import { AvailabilityService } from '../availability/availability.service';
+import { AgoraService } from '../agora/agora.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { AddAppointmentAttachmentDto } from './dto/add-appointment-attachment.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class AppointmentsService {
@@ -29,16 +32,22 @@ export class AppointmentsService {
     private doctorModel: Model<DoctorDocument>,
 
     private readonly availabilityService: AvailabilityService,
+    private readonly agoraService: AgoraService,
+    private readonly notificationsService: NotificationsService,
 
     @InjectConnection()
     private readonly connection: Connection,
   ) {}
 
+  generateAgoraToken(channelName: string, uid: string | number) {
+    return this.agoraService.generateToken(channelName, uid);
+  }
+
   // ---------------- Create Appointment ----------------
   async create(userId: string, dto: CreateAppointmentDto) {
     // 1. Parallelize initial reads outside transaction
     const [doctor, availabilities] = await Promise.all([
-      this.doctorModel.findById(dto.doctorId).select('consultationFee').lean(),
+      this.doctorModel.findById(dto.doctorId).select('_id').lean(),
       this.availabilityService.getByDoctor(new Types.ObjectId(dto.doctorId)),
     ]);
 
@@ -87,7 +96,7 @@ export class AppointmentsService {
             appointmentEndTime: endTime,
             reasonTitle: dto.reasonTitle,
             reasonDetails: dto.reasonDetails,
-            consultationFee: doctor.consultationFee || dayAvailability.fee,
+            consultationFee: dayAvailability.fee,
           },
         ],
         { session },
@@ -107,6 +116,9 @@ export class AppointmentsService {
       }
 
       await session.commitTransaction();
+
+      this.notificationsService.emit('appointment.created', appointment[0]);
+
       return appointment[0];
     } catch (e) {
       await session.abortTransaction();
@@ -191,7 +203,7 @@ export class AppointmentsService {
           $gte: new Date(new Date(appointmentDate).setHours(0, 0, 0, 0)),
           $lt: new Date(new Date(appointmentDate).setHours(23, 59, 59, 999)),
         },
-        status: { $ne: 'CANCELLED' },
+        status: { $ne: AppointmentStatus.CANCELLED },
         appointmentTime: { $lt: appointmentEndTime },
         appointmentEndTime: { $gt: appointmentTime },
       })
@@ -246,7 +258,7 @@ export class AppointmentsService {
           $gte: new Date(new Date(date).setHours(0, 0, 0, 0)),
           $lt: new Date(new Date(date).setHours(23, 59, 59, 999)),
         },
-        status: { $ne: 'CANCELLED' },
+        status: { $ne: AppointmentStatus.CANCELLED },
       })
       .select('appointmentTime')
       .lean();
@@ -273,7 +285,7 @@ export class AppointmentsService {
   async getForUser(userId: string) {
     const results = await this.appointmentModel
       .find({ userId: new Types.ObjectId(userId) })
-      .populate('doctorId', 'currentOrganization consultationFee')
+      .populate('doctorId', 'currentOrganization')
       .populate({
         path: 'doctorId',
         populate: { path: 'userId', select: 'name email phone' },
@@ -317,7 +329,7 @@ export class AppointmentsService {
     appointmentId: string,
     requesterId: string,
     role: string,
-    status: string,
+    status: AppointmentStatus,
     doctorId?: string,
   ) {
     const appointment = await this.appointmentModel.findById(appointmentId);
@@ -349,14 +361,29 @@ export class AppointmentsService {
     }
 
     // Prevent updating if already in a terminal state
-    if (['COMPLETED', 'CANCELLED'].includes(appointment.status)) {
+    if (
+      [AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED].includes(
+        appointment.status,
+      )
+    ) {
       throw new BadRequestException(
         `Appointment is already ${appointment.status} and cannot be updated.`,
       );
     }
 
+    const oldStatus = appointment.status;
     appointment.status = status;
-    return appointment.save();
+    const updatedAppointment = await appointment.save();
+
+    this.notificationsService.emit('appointment.status_change', {
+      appointmentId: appointment._id,
+      status,
+      oldStatus,
+      userId: appointment.userId,
+      doctorId: appointment.doctorId,
+    });
+
+    return updatedAppointment;
   }
 
   async cancelUpcomingForDoctor(doctorId: string) {
@@ -367,9 +394,11 @@ export class AppointmentsService {
       {
         doctorId: new Types.ObjectId(doctorId),
         appointmentDate: { $gte: today },
-        status: { $nin: ['COMPLETED', 'CANCELLED'] },
+        status: {
+          $nin: [AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED],
+        },
       },
-      { status: 'CANCELLED' },
+      { status: AppointmentStatus.CANCELLED },
     );
   }
 
@@ -420,5 +449,22 @@ export class AppointmentsService {
       .padStart(2, '0');
     const endM = (total % 60).toString().padStart(2, '0');
     return `${endH}:${endM}`;
+  }
+
+  async markAsPaid(appointmentId: string, paymentId: string) {
+    return this.appointmentModel.findByIdAndUpdate(
+      appointmentId,
+      {
+        paymentId: new Types.ObjectId(paymentId),
+        // status: AppointmentStatus.UPCOMING, // Status might already be UPCOMING, but ensuring it.
+        // Actually, prompt says "Mark payment status as PAID", appointment status might not change if it's already UPCOMING.
+        // But let's just link the payment.
+      },
+      { new: true },
+    );
+  }
+
+  async findById(id: string) {
+    return this.appointmentModel.findById(id).exec();
   }
 }

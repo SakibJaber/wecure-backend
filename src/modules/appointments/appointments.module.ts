@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AppointmentsService } from './appointments.service';
 import { AppointmentsController } from './appointments.controller';
+import { AppointmentSchedulerService } from './appointment.scheduler';
+import { AppointmentReminderScheduler } from './appointment-reminder.scheduler';
 import { Appointment, AppointmentSchema } from './schemas/appointment.schema';
 import {
   AppointmentAttachment,
@@ -10,6 +12,7 @@ import {
 import { Doctor, DoctorSchema } from '../doctors/schemas/doctor.schema';
 import { AvailabilityModule } from '../availability/availability.module';
 import { DoctorsModule } from '../doctors/doctors.module';
+import { AgoraModule } from '../agora/agora.module';
 
 @Module({
   imports: [
@@ -23,9 +26,14 @@ import { DoctorsModule } from '../doctors/doctors.module';
     ]),
     AvailabilityModule,
     DoctorsModule,
+    AgoraModule,
   ],
   controllers: [AppointmentsController],
-  providers: [AppointmentsService],
+  providers: [
+    AppointmentsService,
+    AppointmentSchedulerService,
+    AppointmentReminderScheduler,
+  ],
   exports: [AppointmentsService],
 })
 export class AppointmentsModule {}

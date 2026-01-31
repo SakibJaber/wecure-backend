@@ -6,6 +6,7 @@ import { VerifyRegistrationOtpDto } from './dto/verify-registration-otp.dto';
 import { SendResetPasswordOtpDto } from './dto/send-reset-password-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ResendOtpDto } from './dto/resend-otp.dto';
+import { VerifyResetOtpDto } from './dto/verify-reset-otp.dto';
 import { JwtRefreshGuard } from 'src/common/guards/jwt-refresh.guard';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 
@@ -100,7 +101,7 @@ export class AuthController {
   @Post('resend-otp')
   async resendOtp(@Body() dto: ResendOtpDto) {
     try {
-      const result = await this.authService.resendRegistrationOtp(dto.email);
+      const result = await this.authService.resendOtp(dto.email);
       return {
         success: true,
         statusCode: 200,
@@ -160,12 +161,34 @@ export class AuthController {
     }
   }
 
+  @Post('verify-reset-otp')
+  async verifyResetOtp(@Body() dto: VerifyResetOtpDto) {
+    try {
+      const result = await this.authService.verifyPasswordResetOtp(
+        dto.email,
+        dto.otp,
+      );
+      return {
+        success: true,
+        statusCode: 200,
+        message: result.message,
+        data: { resetToken: result.resetToken },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'OTP verification failed',
+        data: null,
+      };
+    }
+  }
+
   @Post('reset-password')
   async resetPassword(@Body() dto: ResetPasswordDto) {
     try {
       const result = await this.authService.resetPassword(
-        dto.email,
-        dto.otp,
+        dto.resetToken,
         dto.newPassword,
       );
       return {
