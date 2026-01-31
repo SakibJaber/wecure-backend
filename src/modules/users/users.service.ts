@@ -211,12 +211,14 @@ export class UsersService {
       phone?: string;
       dateOfBirth?: string;
       profileImage?: string;
+      allergies?: string[];
     },
   ) {
     const updates: any = {};
     if (data.name) updates.name = data.name;
     if (data.dateOfBirth) updates.dateOfBirth = new Date(data.dateOfBirth);
     if (data.profileImage) updates.profileImage = data.profileImage;
+    if (data.allergies) updates.allergies = data.allergies;
     if (data.phone) {
       updates.phone = this.encryptionService.encrypt(data.phone);
     }
@@ -278,8 +280,15 @@ export class UsersService {
       this.userModel.countDocuments(filter),
     ]);
 
+    const decryptedData = data.map((user) => {
+      if (user.phone) {
+        user.phone = this.encryptionService.decrypt(user.phone);
+      }
+      return user;
+    });
+
     return {
-      data,
+      data: decryptedData,
       total,
       page,
       limit,

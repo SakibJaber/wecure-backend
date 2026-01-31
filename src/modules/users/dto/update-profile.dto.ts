@@ -19,4 +19,8 @@ export class UpdateProfileDto {
   @IsString()
   @IsNotEmpty()
   profileImage?: string;
+
+  @IsOptional()
+  @IsString({ each: true })
+  allergies?: string[];
 }

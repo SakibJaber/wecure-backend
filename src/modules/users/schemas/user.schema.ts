@@ -54,6 +54,9 @@ export class User {
 
   @Prop({ type: [String], default: [] })
   fcmTokens: string[];
+
+  @Prop({ type: [String], default: [] })
+  allergies: string[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
