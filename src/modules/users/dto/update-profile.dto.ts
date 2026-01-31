@@ -1,4 +1,11 @@
-import { IsOptional, IsString, IsNotEmpty, IsISO8601 } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNotEmpty,
+  IsISO8601,
+  IsEnum,
+} from 'class-validator';
+import { BloodGroup } from 'src/common/enum/blood-group.enum';
 
 export class UpdateProfileDto {
   @IsOptional()
@@ -23,4 +30,8 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString({ each: true })
   allergies?: string[];
+
+  @IsOptional()
+  @IsEnum(BloodGroup)
+  bloodGroup?: BloodGroup;
 }

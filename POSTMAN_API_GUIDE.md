@@ -144,6 +144,8 @@ Most endpoints require a Bearer Token.
   - `phone`: (text)
   - `dateOfBirth`: (text, ISO8601)
   - `image`: (file)
+  - `bloodGroup`: (text) - A+, A-, B+, B-, AB+, AB-, O+, O-
+  - `allergies[]`: (text) - Multiple fields for array or comma-separated if supported by your parser
 
 ### Change Password
 

@@ -212,6 +212,7 @@ export class UsersService {
       dateOfBirth?: string;
       profileImage?: string;
       allergies?: string[];
+      bloodGroup?: string;
     },
   ) {
     const updates: any = {};
@@ -219,6 +220,7 @@ export class UsersService {
     if (data.dateOfBirth) updates.dateOfBirth = new Date(data.dateOfBirth);
     if (data.profileImage) updates.profileImage = data.profileImage;
     if (data.allergies) updates.allergies = data.allergies;
+    if (data.bloodGroup) updates.bloodGroup = data.bloodGroup;
     if (data.phone) {
       updates.phone = this.encryptionService.encrypt(data.phone);
     }

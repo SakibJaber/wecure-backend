@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { Role } from 'src/common/enum/role.enum';
 import { UserStatus } from 'src/common/enum/user.status.enum';
+import { BloodGroup } from 'src/common/enum/blood-group.enum';
 
 export type UserDocument = User & Document;
 
@@ -57,6 +58,9 @@ export class User {
 
   @Prop({ type: [String], default: [] })
   allergies: string[];
+
+  @Prop({ enum: BloodGroup })
+  bloodGroup?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
