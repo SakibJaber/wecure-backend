@@ -1,4 +1,10 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
@@ -6,13 +12,16 @@ import { User, UserDocument } from './schemas/user.schema';
 import { EncryptionService } from 'src/common/services/encryption.service';
 import { Role } from 'src/common/enum/role.enum';
 import { UserStatus } from 'src/common/enum/user.status.enum';
+import { CreateAdminDto } from './dto/create-admin.dto';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
   constructor(
     @InjectModel(User.name)
     public readonly userModel: Model<UserDocument>,
     private readonly encryptionService: EncryptionService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async createUser(data: {
@@ -28,18 +37,42 @@ export class UsersService {
 
     const hashedPassword = await bcrypt.hash(data.password, 12);
 
+    const dataToSave: any = {
+      ...data,
+      password: hashedPassword,
+    };
+
     if (data.phone) {
-      data.phone = this.encryptionService.encrypt(data.phone);
+      dataToSave.phone = this.encryptionService.encrypt(data.phone);
+    }
+
+    if (data.role === Role.ADMIN || data.role === Role.SUPER_ADMIN) {
+      dataToSave.isEmailVerified = true;
     }
 
     const status =
       data.role === Role.DOCTOR ? UserStatus.PENDING : UserStatus.ACTIVE;
 
     return this.userModel.create({
-      ...data,
-      password: hashedPassword,
+      ...dataToSave,
       status,
     });
+  }
+
+  async createAdmin(data: CreateAdminDto) {
+    const admin = await this.createUser({
+      ...data,
+      role: Role.ADMIN,
+    });
+
+    // Emit event to send credentials via email
+    this.eventEmitter.emit('admin.created', {
+      email: data.email,
+      name: data.name,
+      password: data.password, // Original password before hashing in createUser
+    });
+
+    return admin;
   }
 
   async findByEmail(email: string) {
@@ -254,13 +287,20 @@ export class UsersService {
     };
   }
 
-  async toggleUserStatus(userId: string) {
+  async toggleUserStatus(userId: string, requestingUserId?: string) {
+    if (requestingUserId && userId === requestingUserId) {
+      throw new BadRequestException('You cannot block/unblock yourself');
+    }
+
     const user = await this.userModel.findById(userId);
     if (!user) {
       throw new ConflictException('User not found');
     }
 
-    const newStatus = user.status === 'BLOCKED' ? 'ACTIVE' : 'BLOCKED';
+    const newStatus =
+      user.status === UserStatus.BLOCKED
+        ? UserStatus.ACTIVE
+        : UserStatus.BLOCKED;
     return this.userModel.findByIdAndUpdate(
       userId,
       { status: newStatus },

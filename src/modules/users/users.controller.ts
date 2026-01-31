@@ -18,6 +18,7 @@ import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
+import { CreateAdminDto } from './dto/create-admin.dto';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { Role } from 'src/common/enum/role.enum';
@@ -129,6 +130,28 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @Post('admin')
+  async createAdmin(@Body() dto: CreateAdminDto) {
+    try {
+      const admin = await this.usersService.createAdmin(dto);
+      return {
+        success: true,
+        statusCode: 201,
+        message: 'Admin created successfully',
+        data: admin,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to create admin',
+        data: null,
+      };
+    }
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @Get()
   async findAll(@Query() query) {
@@ -154,9 +177,12 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @Patch(':id/toggle-status')
-  async toggleUserStatus(@Param('id') id: string) {
+  async toggleUserStatus(@Req() req, @Param('id') id: string) {
     try {
-      const user = await this.usersService.toggleUserStatus(id);
+      const user = await this.usersService.toggleUserStatus(
+        id,
+        req.user.userId,
+      );
       if (!user) {
         throw new Error('User not found after update');
       }

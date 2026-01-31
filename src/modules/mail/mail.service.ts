@@ -179,6 +179,24 @@ export class MailService {
     }
   }
 
+  async sendAdminCredentials(email: string, name: string, password: string) {
+    try {
+      const message = `
+        Dear ${name},<br><br>
+        Your administrator account has been created on WECURE.<br><br>
+        <strong>Login Credentials:</strong><br>
+        Email: ${email}<br>
+        Password: ${password}<br><br>
+        Please login and change your password as soon as possible.
+      `;
+      await this.sendEmail(email, 'Your Admin Credentials', message);
+    } catch (err) {
+      this.logger.error(
+        `Failed to send admin credentials to ${email}: ${err.message}`,
+      );
+    }
+  }
+
   // Method to close transporter (useful for graceful shutdown)
   async close() {
     if (this.transporter) {

@@ -23,7 +23,7 @@ Most endpoints require a Bearer Token.
 
 - **Method:** `POST`
 - **URL:** `{{baseUrl}}/auth/register`
-- **Description:** Register a new user (Patient or Doctor).
+- **Description:** Register a new user (USER or DOCTOR).
 - **Body:**
 
 ```json
@@ -31,7 +31,7 @@ Most endpoints require a Bearer Token.
   "name": "John Doe",
   "email": "john@example.com",
   "password": "password123",
-  "role": "patient", // or "doctor"
+  "role": "USER", // or "DOCTOR"
   "doctorId": "12345" // Required if role is "doctor"
 }
 ```
@@ -199,24 +199,32 @@ Most endpoints require a Bearer Token.
 }
 ```
 
-### Get All Users (Admin)
+- `role`: (string)
+- `search`: (string)
 
-- **Method:** `GET`
-- **URL:** `{{baseUrl}}/users`
-- **Description:** Get all users. Admin only.
+### Create Admin (Super Admin)
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/users/admin`
+- **Description:** Create a new Admin user. Super Admin only.
 - **Headers:**
   - `Authorization`: `Bearer <accessToken>`
-- **Query Params:**
-  - `page`: (number)
-  - `limit`: (number)
-  - `search`: (string)
-  - `role`: (string)
+- **Body:**
+
+```json
+{
+  "name": "Admin Name",
+  "email": "admin@example.com",
+  "password": "strongPassword123",
+  "phone": "+1234567890" // Optional
+}
+```
 
 ### Toggle User Status (Admin)
 
 - **Method:** `PATCH`
 - **URL:** `{{baseUrl}}/users/:id/toggle-status`
-- **Description:** Block/Unblock a user. Admin only.
+- **Description:** Block/Unblock a user. Admin/Super Admin only. **Note:** An admin cannot block themselves.
 - **Headers:**
   - `Authorization`: `Bearer <accessToken>`
 
@@ -224,14 +232,14 @@ Most endpoints require a Bearer Token.
 
 - **Method:** `PATCH`
 - **URL:** `{{baseUrl}}/users/:id/role`
-- **Description:** Change a user's role. Admin only.
+- **Description:** Change a user's role. Admin/Super Admin only.
 - **Headers:**
   - `Authorization`: `Bearer <accessToken>`
 - **Body:**
 
 ```json
 {
-  "role": "admin" // or "doctor", "patient"
+  "role": "ADMIN" // or "DOCTOR", "USER", "SUPER_ADMIN"
 }
 ```
 
@@ -508,6 +516,7 @@ Most endpoints require a Bearer Token.
 - **Description:** Update appointment status (CANCELLED, COMPLETED).
 - **Headers:**
   - `Authorization`: `Bearer <accessToken>`
+- **Note:** Can be done by USER or DOCTOR.
 - **Body:**
 
 ```json

@@ -14,6 +14,7 @@ import { AgoraModule } from './modules/agora/agora.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SeederModule } from './modules/seeder/seeder.module';
 
 const logger = new Logger('Database');
 
@@ -52,6 +53,7 @@ const logger = new Logger('Database');
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
     NotificationsModule,
+    SeederModule,
   ],
   controllers: [AppController],
   providers: [
