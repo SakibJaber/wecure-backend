@@ -17,6 +17,8 @@ import { UploadsModule } from './uploads/uploads.module';
 import { PublicUploadModule } from 'src/modules/public-upload/public-upload.module';
 import { ContactSupportModule } from './contact-support/contact-support.module';
 import { LegalContentModule } from './legal-content/legal-content.module';
+import { SeederModule } from 'src/modules/seeder/seeder.module';
+import { AgoraModule } from 'src/modules/agora/agora.module';
 
 @Module({
   imports: [
@@ -29,6 +31,8 @@ import { LegalContentModule } from './legal-content/legal-content.module';
     ReviewsModule,
     PaymentsModule,
     // DonationsModule,
+    AgoraModule,
+    SeederModule,
     WellnessTipsModule,
     AuditLogsModule,
     SpecialistModule,

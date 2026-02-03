@@ -5,17 +5,17 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DomainModule } from './modules/domain.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
+import { AuditLogsService } from './modules/audit-logs/audit-logs.service';
+import { UploadsModule } from './modules/uploads/uploads.module';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
 import { databaseConfig } from './config/database.config';
 import { CommonModule } from './common/common.module';
 import { awsConfig } from 'src/config/aws.config';
 import { appConfig } from './config/app.config';
-import { AgoraModule } from './modules/agora/agora.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { NotificationsModule } from './modules/notifications/notifications.module';
-import { SeederModule } from './modules/seeder/seeder.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { throttlerConfig } from './config/throttler.config';
 
@@ -52,12 +52,30 @@ const logger = new Logger('Database');
     DomainModule,
     AuditLogsModule,
     CommonModule,
-    AgoraModule,
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
     NotificationsModule,
-    SeederModule,
     ThrottlerModule.forRoot(throttlerConfig()),
+    UploadsModule.registerAsync({
+      imports: [ConfigModule, AuditLogsModule],
+      inject: [ConfigService, AuditLogsService],
+      useFactory: (
+        configService: ConfigService,
+        auditLogsService: AuditLogsService,
+      ) => ({
+        aws: {
+          region: configService.get<string>('aws.region')!,
+          accessKeyId: configService.get<string>('aws.accessKeyId')!,
+          secretAccessKey: configService.get<string>('aws.secretAccessKey')!,
+          bucketName: configService.get<string>('aws.s3.bucketName')!,
+        },
+        signedUrlExpireSeconds:
+          configService.get<number>('aws.s3.signedUrlExpireSeconds') ?? 300,
+      }),
+      logger: {
+        useExisting: AuditLogsService,
+      },
+    }),
   ],
   controllers: [AppController],
   providers: [

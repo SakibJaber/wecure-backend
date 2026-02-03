@@ -1,5 +1,9 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import {
+  Injectable,
+  BadRequestException,
+  Inject,
+  Optional,
+} from '@nestjs/common';
 import {
   S3Client,
   PutObjectCommand,
@@ -7,7 +11,12 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
-import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import {
+  UploadsModuleOptions,
+  IUploadAuditLogger,
+  UPLOADS_OPTIONS_TOKEN,
+  UPLOAD_LOGGER_TOKEN,
+} from './interfaces/uploads-options.interface';
 
 @Injectable()
 export class UploadsService {
@@ -16,20 +25,22 @@ export class UploadsService {
   private signedUrlExpireSeconds: number;
 
   constructor(
-    private readonly configService: ConfigService,
-    private readonly auditLogsService: AuditLogsService,
+    @Inject(UPLOADS_OPTIONS_TOKEN)
+    private readonly options: UploadsModuleOptions,
+    @Optional()
+    @Inject(UPLOAD_LOGGER_TOKEN)
+    private readonly auditLogger: IUploadAuditLogger,
   ) {
     this.s3 = new S3Client({
-      region: this.configService.get<string>('aws.region'),
+      region: this.options.aws.region,
       credentials: {
-        accessKeyId: this.configService.get<string>('aws.accessKeyId')!,
-        secretAccessKey: this.configService.get<string>('aws.secretAccessKey')!,
+        accessKeyId: this.options.aws.accessKeyId,
+        secretAccessKey: this.options.aws.secretAccessKey,
       },
     });
 
-    this.bucket = this.configService.get<string>('aws.s3.bucketName')!;
-    this.signedUrlExpireSeconds =
-      this.configService.get<number>('aws.s3.signedUrlExpireSeconds') ?? 300;
+    this.bucket = this.options.aws.bucketName;
+    this.signedUrlExpireSeconds = this.options.signedUrlExpireSeconds ?? 300;
   }
 
   async generateUploadUrl(
@@ -56,13 +67,8 @@ export class UploadsService {
   }
 
   async generateViewUrl(fileKey: string, userId?: string) {
-    if (userId) {
-      this.auditLogsService.create({
-        userId,
-        action: 'GENERATE_VIEW_URL',
-        resource: 'S3_OBJECT',
-        resourceId: fileKey,
-      });
+    if (userId && this.auditLogger) {
+      this.auditLogger.logView(userId, fileKey);
     }
 
     const command = new GetObjectCommand({
@@ -73,14 +79,6 @@ export class UploadsService {
     return getSignedUrl(this.s3, command, {
       expiresIn: this.signedUrlExpireSeconds,
     });
-  }
-
-  getStreamUrl(fileKey: string): string {
-    const appUrl =
-      this.configService.get<string>('app.url') || 'http://localhost:3000';
-    // Ensure no double slashes if appUrl ends with /
-    const baseUrl = appUrl.endsWith('/') ? appUrl.slice(0, -1) : appUrl;
-    return `${baseUrl}/uploads/stream/${fileKey}`;
   }
 
   async uploadBuffer(
@@ -102,13 +100,8 @@ export class UploadsService {
 
     await this.s3.send(command);
 
-    if (userId) {
-      this.auditLogsService.create({
-        userId,
-        action: 'UPLOAD_PRIVATE_FILE',
-        resource: 'S3_OBJECT',
-        resourceId: fileKey,
-      });
+    if (userId && this.auditLogger) {
+      this.auditLogger.logUpload(userId, fileKey);
     }
     return fileKey;
   }

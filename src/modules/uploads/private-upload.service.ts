@@ -3,8 +3,9 @@ import {
   InternalServerErrorException,
   BadRequestException,
   NotFoundException,
+  Inject,
+  Optional,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as sharp from 'sharp';
@@ -15,7 +16,12 @@ import {
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
-import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import {
+  UploadsModuleOptions,
+  IUploadAuditLogger,
+  UPLOADS_OPTIONS_TOKEN,
+  UPLOAD_LOGGER_TOKEN,
+} from './interfaces/uploads-options.interface';
 
 @Injectable()
 export class PrivateUploadService {
@@ -23,17 +29,20 @@ export class PrivateUploadService {
   private readonly bucket: string;
 
   constructor(
-    private readonly config: ConfigService,
-    private readonly auditLogsService: AuditLogsService,
+    @Inject(UPLOADS_OPTIONS_TOKEN)
+    private readonly options: UploadsModuleOptions,
+    @Optional()
+    @Inject(UPLOAD_LOGGER_TOKEN)
+    private readonly auditLogger: IUploadAuditLogger,
   ) {
     this.s3 = new S3Client({
-      region: this.config.get<string>('aws.region'),
+      region: this.options.aws.region,
       credentials: {
-        accessKeyId: this.config.get<string>('aws.accessKeyId')!,
-        secretAccessKey: this.config.get<string>('aws.secretAccessKey')!,
+        accessKeyId: this.options.aws.accessKeyId,
+        secretAccessKey: this.options.aws.secretAccessKey,
       },
     });
-    this.bucket = this.config.get<string>('aws.s3.bucketName')!;
+    this.bucket = this.options.aws.bucketName;
   }
 
   /**
@@ -79,13 +88,8 @@ export class PrivateUploadService {
         }),
       );
 
-      if (userId) {
-        this.auditLogsService.create({
-          userId,
-          action: 'UPLOAD_PRIVATE_FILE',
-          resource: 'S3_OBJECT',
-          resourceId: key,
-        });
+      if (userId && this.auditLogger) {
+        this.auditLogger.logUpload(userId, key);
       }
 
       return key;

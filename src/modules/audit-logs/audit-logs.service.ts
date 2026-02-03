@@ -3,8 +3,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AuditLog, AuditLogDocument } from './schemas/audit-log.schema';
 
+import { IUploadAuditLogger } from '../uploads/interfaces/uploads-options.interface';
+
 @Injectable()
-export class AuditLogsService {
+export class AuditLogsService implements IUploadAuditLogger {
   constructor(
     @InjectModel(AuditLog.name)
     private readonly auditLogModel: Model<AuditLogDocument>,
@@ -72,5 +74,24 @@ export class AuditLogsService {
       page: filters.page,
       limit: filters.limit,
     };
+  }
+
+  // Implementation for IUploadAuditLogger
+  logUpload(userId: string, fileKey: string) {
+    this.create({
+      userId,
+      action: 'UPLOAD_PRIVATE_FILE',
+      resource: 'S3_OBJECT',
+      resourceId: fileKey,
+    });
+  }
+
+  logView(userId: string, fileKey: string) {
+    this.create({
+      userId,
+      action: 'GENERATE_VIEW_URL',
+      resource: 'S3_OBJECT',
+      resourceId: fileKey,
+    });
   }
 }

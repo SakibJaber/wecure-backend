@@ -6,7 +6,7 @@ export const awsConfig = registerAs('aws', () => ({
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   s3: {
     bucketName: process.env.AWS_S3_BUCKET,
-    signedUrlExpireSeconds: 300, // 5 minutes
+    signedUrlExpireSeconds: process.env.AWS_SIGNED_URL_EXPIRE || 300,
   },
   public: {
     region: process.env.PUBLIC_AWS_REGION,
