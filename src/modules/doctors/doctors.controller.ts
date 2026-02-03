@@ -10,6 +10,7 @@ import {
   Req,
   UseInterceptors,
   UploadedFile,
+  UploadedFiles,
   Query,
 } from '@nestjs/common';
 import { DoctorsService } from './doctors.service';
@@ -74,18 +75,21 @@ export class DoctorsController {
   @UseInterceptors(
     GlobalPublicUploadInterceptor({
       fieldName: 'document',
-      maxCount: 1,
+      maxCount: 5,
       allowedMimes: /\/(pdf|jpg|jpeg|png)$/i,
-      maxFileSizeBytes: 10 * 1024 * 1024, // 10MB
+      maxFileSizeBytes: 20 * 1024 * 1024, // 20MB
     }),
   )
-  async uploadDocument(@Req() req, @UploadedFile() file: Express.Multer.File) {
-    if (!file) {
-      throw new Error('No file uploaded');
+  async uploadDocument(
+    @Req() req,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    if (!files || files.length === 0) {
+      throw new Error('No files uploaded');
     }
-    return this.doctorsService.uploadVerificationDocument(
+    return this.doctorsService.uploadVerificationDocuments(
       req.user.userId,
-      file,
+      files,
     );
   }
 
@@ -97,11 +101,41 @@ export class DoctorsController {
 
   // Admin endpoints
   @Roles(Role.ADMIN)
-  @Get('admin/all')
-  async getAllDoctors(@Query() query) {
+  @Get('admin/new-doctors')
+  async getNewDoctors(@Req() req, @Query() query) {
     try {
-      const { data, ...meta } =
-        await this.doctorsService.getAllDoctorsForAdmin(query);
+      const { data, ...meta } = await this.doctorsService.getAllDoctorsForAdmin(
+        req.user.userId,
+        {
+          ...query,
+          status: 'PENDING',
+        },
+      );
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'New doctors fetched successfully',
+        data,
+        meta,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to fetch new doctors',
+        data: null,
+      };
+    }
+  }
+
+  @Roles(Role.ADMIN)
+  @Get('admin/all')
+  async getAllDoctors(@Req() req, @Query() query) {
+    try {
+      const { data, ...meta } = await this.doctorsService.getAllDoctorsForAdmin(
+        req.user.userId,
+        query,
+      );
       return {
         success: true,
         statusCode: 200,
@@ -114,6 +148,30 @@ export class DoctorsController {
         success: false,
         statusCode: error.status || 400,
         message: error.message || 'Failed to fetch doctors',
+        data: null,
+      };
+    }
+  }
+
+  @Roles(Role.ADMIN)
+  @Get('admin/:id')
+  async getDoctorForAdmin(@Req() req, @Param('id') id: string) {
+    try {
+      const doctor = await this.doctorsService.getDoctorByIdForAdmin(
+        id,
+        req.user.userId,
+      );
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Doctor details fetched successfully',
+        data: doctor,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to fetch doctor details',
         data: null,
       };
     }

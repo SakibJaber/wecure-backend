@@ -7,6 +7,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
 export class UploadsService {
@@ -14,7 +15,10 @@ export class UploadsService {
   private bucket: string;
   private signedUrlExpireSeconds: number;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly auditLogsService: AuditLogsService,
+  ) {
     this.s3 = new S3Client({
       region: this.configService.get<string>('aws.region'),
       credentials: {
@@ -51,7 +55,16 @@ export class UploadsService {
     return { uploadUrl, fileKey };
   }
 
-  async generateViewUrl(fileKey: string) {
+  async generateViewUrl(fileKey: string, userId?: string) {
+    if (userId) {
+      this.auditLogsService.create({
+        userId,
+        action: 'GENERATE_VIEW_URL',
+        resource: 'S3_OBJECT',
+        resourceId: fileKey,
+      });
+    }
+
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: fileKey,
@@ -62,11 +75,20 @@ export class UploadsService {
     });
   }
 
+  getStreamUrl(fileKey: string): string {
+    const appUrl =
+      this.configService.get<string>('app.url') || 'http://localhost:3000';
+    // Ensure no double slashes if appUrl ends with /
+    const baseUrl = appUrl.endsWith('/') ? appUrl.slice(0, -1) : appUrl;
+    return `${baseUrl}/uploads/stream/${fileKey}`;
+  }
+
   async uploadBuffer(
     buffer: Buffer,
     mimeType: string,
     folder: string,
     originalName: string,
+    userId?: string,
   ): Promise<string> {
     const extension = originalName.split('.').pop() || 'bin';
     const fileKey = `${folder}/${randomUUID()}.${extension}`;
@@ -79,6 +101,15 @@ export class UploadsService {
     });
 
     await this.s3.send(command);
+
+    if (userId) {
+      this.auditLogsService.create({
+        userId,
+        action: 'UPLOAD_PRIVATE_FILE',
+        resource: 'S3_OBJECT',
+        resourceId: fileKey,
+      });
+    }
     return fileKey;
   }
 }

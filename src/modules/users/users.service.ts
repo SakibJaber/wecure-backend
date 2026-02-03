@@ -31,6 +31,10 @@ export class UsersService {
     role: string;
     phone?: string;
     doctorId?: string;
+    dateOfBirth?: Date | string;
+    allergies?: string[];
+    bloodGroup?: string;
+    profileImage?: string;
   }) {
     const exists = await this.userModel.findOne({ email: data.email });
     if (exists) throw new ConflictException('Email already in use');
@@ -44,6 +48,19 @@ export class UsersService {
 
     if (data.phone) {
       dataToSave.phone = this.encryptionService.encrypt(data.phone);
+    }
+    if (data.allergies) {
+      dataToSave.allergies = this.encryptionService.encrypt(
+        JSON.stringify(data.allergies),
+      );
+    }
+    if (data.dateOfBirth) {
+      // Ensure we store string representation usually
+      const dobStr =
+        data.dateOfBirth instanceof Date
+          ? (data.dateOfBirth as Date).toISOString()
+          : data.dateOfBirth;
+      dataToSave.dateOfBirth = this.encryptionService.encrypt(dobStr);
     }
 
     if (data.role === Role.ADMIN || data.role === Role.SUPER_ADMIN) {
@@ -77,16 +94,47 @@ export class UsersService {
 
   async findByEmail(email: string) {
     const user = await this.userModel.findOne({ email }).lean();
-    if (user && user.phone) {
-      user.phone = this.encryptionService.decrypt(user.phone);
+    if (user) {
+      if (user.phone) {
+        user.phone = this.encryptionService.decrypt(user.phone) as string;
+      }
+      if (user.allergies && typeof user.allergies === 'string') {
+        try {
+          (user as any).allergies = JSON.parse(
+            this.encryptionService.decrypt(user.allergies) as string,
+          );
+        } catch (e) {
+          (user as any).allergies = [];
+        }
+      }
+      if (user.dateOfBirth && typeof user.dateOfBirth === 'string') {
+        const decryptedDob = this.encryptionService.decrypt(user.dateOfBirth);
+        // Helper to try converting back to Date or keep string
+        (user as any).dateOfBirth = decryptedDob;
+      }
     }
     return user;
   }
 
   async findById(id: string) {
     const user = await this.userModel.findById(id).select('-password').lean();
-    if (user && user.phone) {
-      user.phone = this.encryptionService.decrypt(user.phone);
+    if (user) {
+      if (user.phone) {
+        user.phone = this.encryptionService.decrypt(user.phone) as string;
+      }
+      if (user.allergies && typeof user.allergies === 'string') {
+        try {
+          (user as any).allergies = JSON.parse(
+            this.encryptionService.decrypt(user.allergies) as string,
+          );
+        } catch (e) {
+          (user as any).allergies = [];
+        }
+      }
+      if (user.dateOfBirth && typeof user.dateOfBirth === 'string') {
+        const decryptedDob = this.encryptionService.decrypt(user.dateOfBirth);
+        (user as any).dateOfBirth = decryptedDob;
+      }
     }
     return user;
   }
@@ -217,9 +265,17 @@ export class UsersService {
   ) {
     const updates: any = {};
     if (data.name) updates.name = data.name;
-    if (data.dateOfBirth) updates.dateOfBirth = new Date(data.dateOfBirth);
+    if (data.dateOfBirth) {
+      updates.dateOfBirth = this.encryptionService.encrypt(
+        new Date(data.dateOfBirth).toISOString(),
+      );
+    }
     if (data.profileImage) updates.profileImage = data.profileImage;
-    if (data.allergies) updates.allergies = data.allergies;
+    if (data.allergies) {
+      updates.allergies = this.encryptionService.encrypt(
+        JSON.stringify(data.allergies),
+      );
+    }
     if (data.bloodGroup) updates.bloodGroup = data.bloodGroup;
     if (data.phone) {
       updates.phone = this.encryptionService.encrypt(data.phone);
@@ -230,8 +286,29 @@ export class UsersService {
       .select('-password')
       .lean();
 
-    if (updatedUser && updatedUser.phone) {
-      updatedUser.phone = this.encryptionService.decrypt(updatedUser.phone);
+    if (updatedUser) {
+      if (updatedUser.phone) {
+        updatedUser.phone = this.encryptionService.decrypt(
+          updatedUser.phone,
+        ) as string;
+      }
+      if (updatedUser.allergies && typeof updatedUser.allergies === 'string') {
+        try {
+          (updatedUser as any).allergies = JSON.parse(
+            this.encryptionService.decrypt(updatedUser.allergies) as string,
+          );
+        } catch (e) {
+          (updatedUser as any).allergies = [];
+        }
+      }
+      if (
+        updatedUser.dateOfBirth &&
+        typeof updatedUser.dateOfBirth === 'string'
+      ) {
+        (updatedUser as any).dateOfBirth = this.encryptionService.decrypt(
+          updatedUser.dateOfBirth,
+        );
+      }
     }
 
     return updatedUser;
@@ -284,7 +361,7 @@ export class UsersService {
 
     const decryptedData = data.map((user) => {
       if (user.phone) {
-        user.phone = this.encryptionService.decrypt(user.phone);
+        user.phone = this.encryptionService.decrypt(user.phone) as string;
       }
       return user;
     });

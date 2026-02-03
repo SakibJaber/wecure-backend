@@ -12,4 +12,8 @@ export class CreateDoctorDto {
   @IsOptional()
   @IsString()
   about?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
 }

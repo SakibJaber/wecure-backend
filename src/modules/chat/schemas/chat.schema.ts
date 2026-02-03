@@ -19,3 +19,8 @@ export class Chat {
 }
 
 export const ChatSchema = SchemaFactory.createForClass(Chat);
+
+// Performance indexes for common queries
+ChatSchema.index({ appointmentId: 1 }); // Fetch all messages in an appointment
+ChatSchema.index({ appointmentId: 1, createdAt: 1 }); // Chronological message retrieval
+ChatSchema.index({ senderId: 1 }); // Filter messages by sender

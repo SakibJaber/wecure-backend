@@ -18,6 +18,8 @@ import { AgoraService } from '../agora/agora.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { AddAppointmentAttachmentDto } from './dto/add-appointment-attachment.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EncryptionService } from 'src/common/services/encryption.service';
+import { UploadsService } from '../uploads/uploads.service';
 
 @Injectable()
 export class AppointmentsService {
@@ -34,6 +36,8 @@ export class AppointmentsService {
     private readonly availabilityService: AvailabilityService,
     private readonly agoraService: AgoraService,
     private readonly notificationsService: NotificationsService,
+    private readonly encryptionService: EncryptionService,
+    private readonly uploadsService: UploadsService,
 
     @InjectConnection()
     private readonly connection: Connection,
@@ -47,7 +51,7 @@ export class AppointmentsService {
   async create(userId: string, dto: CreateAppointmentDto) {
     // 1. Parallelize initial reads outside transaction
     const [doctor, availabilities] = await Promise.all([
-      this.doctorModel.findById(dto.doctorId).select('_id').lean(),
+      this.doctorModel.findById(dto.doctorId).select('_id specialtyId').lean(),
       this.availabilityService.getByDoctor(new Types.ObjectId(dto.doctorId)),
     ]);
 
@@ -90,12 +94,12 @@ export class AppointmentsService {
           {
             userId: new Types.ObjectId(userId),
             doctorId: new Types.ObjectId(dto.doctorId),
-            specialistId: new Types.ObjectId(dto.specialistId),
+            specialistId: doctor.specialtyId,
             appointmentDate: new Date(dto.appointmentDate),
             appointmentTime: dto.appointmentTime,
             appointmentEndTime: endTime,
-            reasonTitle: dto.reasonTitle,
-            reasonDetails: dto.reasonDetails,
+            reasonTitle: this.encryptionService.encrypt(dto.reasonTitle),
+            reasonDetails: this.encryptionService.encrypt(dto.reasonDetails),
             consultationFee: dayAvailability.fee,
           },
         ],
@@ -267,18 +271,136 @@ export class AppointmentsService {
       existingAppointments.map((a) => a.appointmentTime),
     );
 
-    // 4. Filter out booked slots
-    return allSlots.map((time) => ({
-      time,
-      isAvailable: !bookedTimes.has(time),
-      fee: dayAvailability.fee,
-      duration: dayAvailability.slotSizeMinutes,
-    }));
+    // 4. Filter out booked slots and past slots (if today)
+    const now = new Date();
+    const isToday =
+      date.getDate() === now.getDate() &&
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear();
+
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    return allSlots
+      .filter((time) => {
+        if (isToday) {
+          const slotMinutes = this.timeToMinutes(time);
+          if (slotMinutes <= currentMinutes) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .map((time) => ({
+        time,
+        isAvailable: !bookedTimes.has(time),
+        fee: dayAvailability.fee,
+        duration: dayAvailability.slotSizeMinutes,
+      }));
   }
 
   private timeToMinutes(time: string): number {
     const [h, m] = time.split(':').map(Number);
     return h * 60 + m;
+  }
+
+  private formatDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  async getAvailableDates(doctorId: string, daysToLookAhead: number = 30) {
+    const now = new Date();
+    const startDate = new Date(now);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + daysToLookAhead);
+
+    // 1. Get doctor's availability
+    const availabilities = await this.availabilityService.getByDoctor(
+      new Types.ObjectId(doctorId),
+    );
+
+    if (!availabilities || availabilities.length === 0) {
+      return [];
+    }
+
+    // 2. Normalize availability by Day of Week
+    const availabilityMap = new Map();
+    availabilities.forEach((a) => {
+      if (a.isActive) {
+        availabilityMap.set(a.dayOfWeek, a);
+      }
+    });
+
+    // 3. Get all existing appointments in the range
+    const appointments = await this.appointmentModel
+      .find({
+        doctorId: new Types.ObjectId(doctorId),
+        appointmentDate: {
+          $gte: startDate,
+          $lt: endDate,
+        },
+        status: { $ne: AppointmentStatus.CANCELLED },
+      })
+      .select('appointmentDate appointmentTime')
+      .lean();
+
+    // Map: 'YYYY-MM-DD' -> Set<time>
+    const bookedMap = new Map<string, Set<string>>();
+    appointments.forEach((appt) => {
+      const dateStr = this.formatDate(appt.appointmentDate);
+      if (!bookedMap.has(dateStr)) {
+        bookedMap.set(dateStr, new Set());
+      }
+      bookedMap.get(dateStr)!.add(appt.appointmentTime);
+    });
+
+    const results: any[] = [];
+    const days = [
+      'SUNDAY',
+      'MONDAY',
+      'TUESDAY',
+      'WEDNESDAY',
+      'THURSDAY',
+      'FRIDAY',
+      'SATURDAY',
+    ];
+
+    // 4. Iterate over each day
+    const currentDate = new Date(startDate);
+    while (currentDate < endDate) {
+      const dayName = days[currentDate.getDay()];
+      const dayAvailability = availabilityMap.get(dayName);
+
+      if (dayAvailability) {
+        const dateStr = this.formatDate(currentDate);
+
+        // Calculate total possible slots
+        const allSlots = this.availabilityService.generateSlots(
+          dayAvailability.startTime,
+          dayAvailability.endTime,
+          dayAvailability.slotSizeMinutes,
+        );
+
+        const bookedSlots = bookedMap.get(dateStr) || new Set();
+        const availableCount = allSlots.length - bookedSlots.size;
+
+        if (availableCount > 0) {
+          results.push({
+            date: dateStr,
+            day: dayName,
+            availableSlots: availableCount,
+            totalSlots: allSlots.length,
+          });
+        }
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return results;
   }
 
   // ---------------- Lists ----------------
@@ -294,34 +416,118 @@ export class AppointmentsService {
       .populate('attachments')
       .sort({ appointmentDate: -1 })
       .lean();
-    return results;
+
+    // Decrypt sensitive data
+    // Decrypt sensitive data and generate URLs
+    return Promise.all(
+      results.map(async (appt: any) => {
+        if (appt.reasonTitle) {
+          appt.reasonTitle = this.encryptionService.decrypt(appt.reasonTitle);
+        }
+        if (appt.reasonDetails) {
+          appt.reasonDetails = this.encryptionService.decrypt(
+            appt.reasonDetails,
+          );
+        }
+        // Decrypt doctor phone
+        if (appt.doctorId?.userId?.phone) {
+          appt.doctorId.userId.phone = this.encryptionService.decrypt(
+            appt.doctorId.userId.phone,
+          );
+        }
+        // Transform attachments to include full URL
+        if (appt.attachments && appt.attachments.length > 0) {
+          appt.attachments = await Promise.all(
+            appt.attachments.map(async (att: any) => {
+              if (att.fileKey) {
+                att.url = await this.uploadsService.generateViewUrl(
+                  att.fileKey,
+                  userId,
+                );
+              }
+              return att;
+            }),
+          );
+        }
+        return appt;
+      }),
+    );
   }
 
-  async getForDoctor(userId: string, doctorId?: string) {
-    if (doctorId) {
-      return this.appointmentModel
-        .find({ doctorId: new Types.ObjectId(doctorId) })
+  async getForDoctor(userId?: string, doctorId?: string, query: any = {}) {
+    const page = parseInt(query.page) || 1;
+    const limit = parseInt(query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const filter: any = {};
+    if (doctorId && Types.ObjectId.isValid(doctorId)) {
+      filter.doctorId = new Types.ObjectId(doctorId);
+    } else if (userId) {
+      const doctor = await this.doctorModel.findOne({ userId }).lean();
+      if (!doctor) throw new NotFoundException('Doctor profile not found');
+      filter.doctorId = doctor._id;
+    } else {
+      throw new BadRequestException('UserId or DoctorId is required');
+    }
+
+    if (query.status) {
+      filter.status = query.status;
+    }
+
+    const [data, total] = await Promise.all([
+      this.appointmentModel
+        .find(filter)
         .populate('userId', 'name email phone profileImage')
         .populate('specialistId', 'name')
         .populate('attachments')
         .sort({ appointmentDate: -1 })
-        .lean();
-    }
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      this.appointmentModel.countDocuments(filter),
+    ]);
 
-    // First, find the doctor profile by userId
-    const doctor = await this.doctorModel.findOne({ userId }).lean();
-    if (!doctor) {
-      throw new NotFoundException('Doctor profile not found');
-    }
+    // Decrypt sensitive data
+    // Decrypt sensitive data and generate URLs
+    const decryptedData = await Promise.all(
+      data.map(async (appt: any) => {
+        if (appt.reasonTitle) {
+          appt.reasonTitle = this.encryptionService.decrypt(appt.reasonTitle);
+        }
+        if (appt.reasonDetails) {
+          appt.reasonDetails = this.encryptionService.decrypt(
+            appt.reasonDetails,
+          );
+        }
+        // Decrypt patient phone
+        if (appt.userId?.phone) {
+          appt.userId.phone = this.encryptionService.decrypt(appt.userId.phone);
+        }
+        // Transform attachments to include full URL
+        if (appt.attachments && appt.attachments.length > 0) {
+          appt.attachments = await Promise.all(
+            appt.attachments.map(async (att: any) => {
+              if (att.fileKey) {
+                att.url = await this.uploadsService.generateViewUrl(
+                  att.fileKey,
+                  userId,
+                );
+              }
+              return att;
+            }),
+          );
+        }
+        return appt;
+      }),
+    );
 
-    // Then query appointments using the doctor's _id
-    return this.appointmentModel
-      .find({ doctorId: doctor._id })
-      .populate('userId', 'name email phone profileImage')
-      .populate('specialistId', 'name')
-      .populate('attachments')
-      .sort({ appointmentDate: -1 })
-      .lean();
+    return {
+      data: decryptedData,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   // ---------------- Status Updates ----------------
@@ -403,6 +609,14 @@ export class AppointmentsService {
   }
 
   // ---------------- Attachments ----------------
+  async createAttachmentInfo(userId: string, dto: AddAppointmentAttachmentDto) {
+    return this.attachmentModel.create({
+      fileKey: dto.fileKey,
+      fileType: dto.fileType,
+      uploadedBy: new Types.ObjectId(userId),
+    });
+  }
+
   async addAttachment(
     appointmentId: string,
     requesterId: string,
@@ -465,6 +679,15 @@ export class AppointmentsService {
   }
 
   async findById(id: string) {
-    return this.appointmentModel.findById(id).exec();
+    const appt = await this.appointmentModel.findById(id).lean();
+    if (appt) {
+      if (appt.reasonTitle) {
+        appt.reasonTitle = this.encryptionService.decrypt(appt.reasonTitle);
+      }
+      if (appt.reasonDetails) {
+        appt.reasonDetails = this.encryptionService.decrypt(appt.reasonDetails);
+      }
+    }
+    return appt;
   }
 }

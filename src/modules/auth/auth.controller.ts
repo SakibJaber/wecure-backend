@@ -9,11 +9,13 @@ import { ResendOtpDto } from './dto/resend-otp.dto';
 import { VerifyResetOtpDto } from './dto/verify-reset-otp.dto';
 import { JwtRefreshGuard } from 'src/common/guards/jwt-refresh.guard';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 requests per minute
   @Post('register')
   async register(@Body() dto: RegisterDto) {
     try {
@@ -34,6 +36,7 @@ export class AuthController {
     }
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 requests per minute
   @Post('login')
   async login(@Body() dto: LoginDto) {
     try {
@@ -98,6 +101,7 @@ export class AuthController {
     }
   }
 
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 requests per minute
   @Post('resend-otp')
   async resendOtp(@Body() dto: ResendOtpDto) {
     try {
@@ -118,6 +122,7 @@ export class AuthController {
     }
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 requests per minute
   @Post('verify-reg-otp')
   async verifyRegistrationOtp(@Body() dto: VerifyRegistrationOtpDto) {
     try {
@@ -141,6 +146,7 @@ export class AuthController {
     }
   }
 
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 requests per minute
   @Post('send-reset-otp')
   async sendResetPasswordOtp(@Body() dto: SendResetPasswordOtpDto) {
     try {
@@ -161,6 +167,7 @@ export class AuthController {
     }
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 requests per minute
   @Post('verify-reset-otp')
   async verifyResetOtp(@Body() dto: VerifyResetOtpDto) {
     try {
@@ -184,6 +191,7 @@ export class AuthController {
     }
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 requests per minute
   @Post('reset-password')
   async resetPassword(@Body() dto: ResetPasswordDto) {
     try {

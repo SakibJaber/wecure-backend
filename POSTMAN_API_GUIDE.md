@@ -260,9 +260,24 @@ Most endpoints require a Bearer Token.
 {
   "currentOrganization": "City Hospital",
   "specialtyId": "specialty_id_here",
-  "about": "Experienced cardiologist..."
+  "about": "Experienced cardiologist...",
+  "phone": "+1234567890" // Optional, updates user phone
 }
 ```
+
+### Update Doctor Profile
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/doctors/me/profile`
+- **Description:** Update the doctor's profile.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+  - `Content-Type`: `multipart/form-data`
+- **Body:**
+  - `currentOrganization`: (text)
+  - `about`: (text)
+  - `phone`: (text)
+  - `image`: (file)
 
 ### Get My Doctor Profile
 
@@ -329,7 +344,7 @@ Most endpoints require a Bearer Token.
 
 - **Method:** `GET`
 - **URL:** `{{baseUrl}}/doctors/admin/all`
-- **Description:** Get all doctors with pagination and filtering. Admin only.
+- **Description:** Get all doctors with pagination and filtering. Admin only. Returns `phone` and `email`.
 - **Headers:**
   - `Authorization`: `Bearer <accessToken>`
 - **Query Params:**
@@ -358,7 +373,7 @@ Most endpoints require a Bearer Token.
 
 - **Method:** `GET`
 - **URL:** `{{baseUrl}}/doctors/:id/public`
-- **Description:** Get a doctor's public profile with services, experiences, reviews, and availability.
+- **Description:** Get a doctor's public profile with services, experiences, reviews, and availability. Includes `totalExperienceYears`.
 - **Response includes:**
   - Doctor details
   - Services offered
@@ -385,7 +400,7 @@ Most endpoints require a Bearer Token.
       "profileImage": "https://...",
       "specialty": "Cardiology",
       "currentOrganization": "City General Hospital",
-      "experienceYears": 12,
+      "totalExperienceYears": 12,
       "averageRating": 5,
       "totalReviews": 2,
       "minFee": 20,
@@ -436,22 +451,30 @@ Most endpoints require a Bearer Token.
 **Endpoint:** `GET /doctors/:id/public`
 
 - Get full availability rules to highlight available days on calendar
+- Or use `GET /appointments/available-dates` to get specific dates with open slots
 
-### Step 3: Select Specific Date
+### Step 3: Show All Available Dates (Calendar)
+
+**Endpoint:** `GET /appointments/available-dates?doctorId=...`
+
+- Returns a list of dates (e.g. next 30 days) that have at least one available slot
+- Useful for highlighting available dates on a calendar UI
+
+### Step 4: Select Specific Date
 
 **Endpoint:** `GET /appointments/available-slots?doctorId=...&date=2026-01-28`
 
 - Shows all time slots for that specific date
 - Marks each slot as `isAvailable: true/false`
 
-### Step 4: Create Appointment
+### Step 5: Create Appointment
 
 **Endpoint:** `POST /appointments`
 
 - Creates appointment with status `UPCOMING`
 - Returns `appointmentId`
 
-### Step 5: Initialize Payment
+### Step 6: Initialize Payment
 
 **Endpoint:** `POST /payments/appointments/:appointmentId/initialize`
 
@@ -463,26 +486,49 @@ Most endpoints require a Bearer Token.
 
 ## Appointments Module
 
+### Register Attachment (Pre-Appointment)
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/appointments/attachments`
+- **Description:** Register an attachment. Use `multipart/form-data`.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+  - `Content-Type`: `multipart/form-data`
+- **Body:**
+  - `file`: (file)
+  - `fileType`: (string) // Optional, inferred from file
+  - `fileKey`: (string) // Optional, if already uploaded
+
+- **Response:** Returns the created attachment object. Use `_id` for appointment creation.
+
 ### Create Appointment (Patient)
 
 - **Method:** `POST`
 - **URL:** `{{baseUrl}}/appointments`
-- **Description:** Create a new appointment.
+- **Description:** Create a new appointment. Supports inline file upload.
 - **Headers:**
   - `Authorization`: `Bearer <accessToken>`
+  - `Content-Type`: `multipart/form-data`
 - **Body:**
+  - `doctorId`: (string)
+  - `specialistId`: (string) // Optional
+  - `appointmentDate`: (string, YYYY-MM-DD)
+  - `appointmentTime`: (string, HH:mm)
+  - `reasonTitle`: (string)
+  - `reasonDetails`: (string)
+  - `attachment`: (file) // Optional, inline upload
+  - `attachmentIds[]`: (string) // Optional, existing attachment IDs
 
-```json
-{
-  "doctorId": "doctor_id_here",
-  "specialistId": "specialist_id_here",
-  "appointmentDate": "2023-10-27",
-  "appointmentTime": "10:00",
-  "reasonTitle": "Checkup",
-  "reasonDetails": "Feeling unwell",
-  "attachmentIds": ["attachment_id_1"] // Optional
-}
-```
+### Get Available Dates
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/appointments/available-dates`
+- **Description:** Get a list of dates that have available slots for a doctor.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Query Params:**
+  - `doctorId`: (string)
+  - `days`: (number) - Optional, defaults to 30
 
 ### Get My Appointments (Patient)
 
@@ -531,17 +577,14 @@ Most endpoints require a Bearer Token.
 
 - **Method:** `POST`
 - **URL:** `{{baseUrl}}/appointments/:id/attachments`
-- **Description:** Add an attachment to an appointment.
+- **Description:** Add an attachment to an appointment. Use `multipart/form-data`.
 - **Headers:**
   - `Authorization`: `Bearer <accessToken>`
+  - `Content-Type`: `multipart/form-data`
 - **Body:**
-
-```json
-{
-  "fileKey": "s3_file_key",
-  "fileType": "image/png"
-}
-```
+  - `file`: (file)
+  - `fileType`: (string) // Optional
+  - `fileKey`: (string) // Optional
 
 ### Get Video Token
 
@@ -688,6 +731,14 @@ Most endpoints require a Bearer Token.
 - **Description:** Get a presigned URL for viewing a private file.
 - **Query Params:**
   - `key`: (string) S3 file key
+
+### Stream Private File
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/uploads/stream/:key`
+- **Description:** Stream a file directly from the private bucket. Useful for displaying images or downloading files in a single request.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
 
 ## Specialist Module
 

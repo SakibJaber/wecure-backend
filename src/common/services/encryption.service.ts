@@ -17,8 +17,11 @@ export class EncryptionService {
     this.key = crypto.createHash('sha256').update(secret).digest();
   }
 
-  encrypt(text: string): string {
+  encrypt(text?: string): string | undefined {
     if (!text) return text;
+    // Prevent double encryption
+    if (this.isEncrypted(text)) return text;
+
     const iv = crypto.randomBytes(this.ivLength);
     const cipher = crypto.createCipheriv(this.algorithm, this.key, iv);
     let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -26,8 +29,22 @@ export class EncryptionService {
     return `${iv.toString('hex')}:${encrypted}`;
   }
 
-  decrypt(encryptedText: string): string {
-    if (!encryptedText || !encryptedText.includes(':')) return encryptedText;
+  isEncrypted(text?: string): boolean {
+    // Basic check: format is iv:encrypted_content
+    // IV is 16 bytes = 32 hex chars
+    if (!text || typeof text !== 'string') return false;
+    const parts = text.split(':');
+    return parts.length === 2 && parts[0].length === 32;
+  }
+
+  decrypt(encryptedText?: string): string | undefined {
+    if (
+      !encryptedText ||
+      typeof encryptedText !== 'string' ||
+      !encryptedText.includes(':')
+    ) {
+      return encryptedText;
+    }
     const [ivHex, encrypted] = encryptedText.split(':');
     const iv = Buffer.from(ivHex, 'hex');
     const decipher = crypto.createDecipheriv(this.algorithm, this.key, iv);

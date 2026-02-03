@@ -48,7 +48,7 @@ export class User {
   isEmailVerified: boolean;
 
   @Prop()
-  dateOfBirth?: Date;
+  dateOfBirth?: string; // Encrypted
 
   @Prop()
   profileImage?: string;
@@ -56,8 +56,8 @@ export class User {
   @Prop({ type: [String], default: [] })
   fcmTokens: string[];
 
-  @Prop({ type: [String], default: [] })
-  allergies: string[];
+  @Prop()
+  allergies: string; // Encrypted JSON string
 
   @Prop({ enum: BloodGroup })
   bloodGroup?: string;
@@ -65,4 +65,8 @@ export class User {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-UserSchema.index({ email: 1 }, { unique: true });
+// Performance indexes for common queries
+UserSchema.index({ role: 1 }); // Filter by role (admin queries)
+UserSchema.index({ status: 1 }); // Filter by status
+UserSchema.index({ isEmailVerified: 1 }); // Filter verified users
+UserSchema.index({ role: 1, status: 1 }); // Compound index for admin queries

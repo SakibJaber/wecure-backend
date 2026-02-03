@@ -39,4 +39,8 @@ export class Doctor {
 
 export const DoctorSchema = SchemaFactory.createForClass(Doctor);
 
-DoctorSchema.index({ userId: 1 }, { unique: true });
+// Performance indexes for common queries
+DoctorSchema.index({ specialtyId: 1 }); // Filter by specialty (very common)
+DoctorSchema.index({ verificationStatus: 1 }); // Admin filtering
+DoctorSchema.index({ isVerified: 1 }); // Public listings
+DoctorSchema.index({ specialtyId: 1, isVerified: 1 }); // Compound for public doctor listings

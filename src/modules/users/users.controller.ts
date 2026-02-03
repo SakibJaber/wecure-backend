@@ -176,6 +176,36 @@ export class UsersController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    try {
+      const user = await this.usersService.findById(id);
+      if (!user) {
+        return {
+          success: false,
+          statusCode: 404,
+          message: 'User not found',
+          data: null,
+        };
+      }
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'User fetched successfully',
+        data: user,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to fetch user',
+        data: null,
+      };
+    }
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Patch(':id/toggle-status')
   async toggleUserStatus(@Req() req, @Param('id') id: string) {
     try {

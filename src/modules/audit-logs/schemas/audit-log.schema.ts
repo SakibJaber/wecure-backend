@@ -21,5 +21,12 @@ export class AuditLog {
   ipAddress: string;
 }
 
-export const AuditLogSchema =
-  SchemaFactory.createForClass(AuditLog);
+export const AuditLogSchema = SchemaFactory.createForClass(AuditLog);
+
+// Performance indexes for common queries
+AuditLogSchema.index({ userId: 1 }); // User activity history
+AuditLogSchema.index({ action: 1 }); // Filter by action type
+AuditLogSchema.index({ resource: 1 }); // Filter by resource type
+AuditLogSchema.index({ userId: 1, createdAt: -1 }); // Recent user activity
+AuditLogSchema.index({ resource: 1, resourceId: 1 }); // Resource-specific audit trails
+AuditLogSchema.index({ createdAt: -1 }); // Time-based queries

@@ -8,7 +8,7 @@ export class AppointmentAttachment {
   @Prop({
     type: Types.ObjectId,
     ref: 'Appointment',
-    required: true,
+    required: false,
     index: true,
   })
   appointmentId: Types.ObjectId;

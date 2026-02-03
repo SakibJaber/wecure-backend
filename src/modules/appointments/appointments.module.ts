@@ -13,6 +13,7 @@ import { Doctor, DoctorSchema } from '../doctors/schemas/doctor.schema';
 import { AvailabilityModule } from '../availability/availability.module';
 import { DoctorsModule } from '../doctors/doctors.module';
 import { AgoraModule } from '../agora/agora.module';
+import { UploadsModule } from '../uploads/uploads.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AgoraModule } from '../agora/agora.module';
     AvailabilityModule,
     DoctorsModule,
     AgoraModule,
+    UploadsModule,
   ],
   controllers: [AppointmentsController],
   providers: [

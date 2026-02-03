@@ -3,17 +3,46 @@ import { AppModule } from './app.module';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { SecurityExceptionFilter } from './common/filters/security-exception.filter';
+import { AuditLogsService } from './modules/audit-logs/audit-logs.service';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
+
+  // Security Headers with Helmet
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrc: ["'self'"],
+          imgSrc: ["'self'", 'data:', 'https:'],
+        },
+      },
+      crossOriginEmbedderPolicy: false, // Allow embedding for development
+      hsts: {
+        maxAge: 31536000, // 1 year
+        includeSubDomains: true,
+        preload: true,
+      },
+    }),
+  );
 
   //   Global prefix
   app.setGlobalPrefix('api');
 
   //   Global Interceptors & Filters
   app.useGlobalInterceptors(new ResponseInterceptor());
-  app.useGlobalFilters(new HttpExceptionFilter());
+
+  // Resolve AuditLogsService to inject into SecurityExceptionFilter
+  const auditLogsService = app.get(AuditLogsService);
+  app.useGlobalFilters(
+    new HttpExceptionFilter(),
+    new SecurityExceptionFilter(auditLogsService),
+  );
 
   //   Validation
   app.useGlobalPipes(

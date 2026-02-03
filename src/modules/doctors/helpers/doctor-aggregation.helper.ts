@@ -62,6 +62,112 @@ export class DoctorAggregationHelper {
   }
 
   /**
+   * Lookup experiences with type conversion handling
+   */
+  lookupExperiences(): PipelineStage {
+    return {
+      $lookup: {
+        from: 'doctorexperiences',
+        let: { doctorId: '$_id', doctorIdStr: '$doctorIdString' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $or: [
+                  { $eq: ['$doctorId', '$$doctorId'] },
+                  { $eq: [{ $toString: '$doctorId' }, '$$doctorIdStr'] },
+                ],
+              },
+            },
+          },
+        ],
+        as: 'experiences',
+      },
+    };
+  }
+
+  /**
+   * Calculate total experience years from experience documents
+   */
+  calculateExperience(): PipelineStage {
+    return {
+      $addFields: {
+        calculatedExperienceYears: {
+          $floor: {
+            $divide: [
+              {
+                $reduce: {
+                  input: '$experiences',
+                  initialValue: 0,
+                  in: {
+                    $add: [
+                      '$$value',
+                      {
+                        $let: {
+                          vars: {
+                            start: '$$this.startDate',
+                            end: {
+                              $cond: {
+                                if: {
+                                  $or: [
+                                    { $eq: ['$$this.isCurrent', true] },
+                                    { $not: ['$$this.endDate'] },
+                                  ],
+                                },
+                                then: '$$NOW',
+                                else: '$$this.endDate',
+                              },
+                            },
+                          },
+                          in: {
+                            $let: {
+                              vars: {
+                                months: {
+                                  $add: [
+                                    {
+                                      $multiply: [
+                                        {
+                                          $subtract: [
+                                            { $year: '$$end' },
+                                            { $year: '$$start' },
+                                          ],
+                                        },
+                                        12,
+                                      ],
+                                    },
+                                    {
+                                      $subtract: [
+                                        { $month: '$$end' },
+                                        { $month: '$$start' },
+                                      ],
+                                    },
+                                  ],
+                                },
+                              },
+                              in: {
+                                $cond: {
+                                  if: { $gt: ['$$months', 0] },
+                                  then: '$$months',
+                                  else: 0,
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+              12,
+            ],
+          },
+        },
+      },
+    };
+  }
+
+  /**
    * Lookup user details (name, profileImage) with type conversion
    */
   lookupUserDetails(): PipelineStage[] {
@@ -182,6 +288,9 @@ export class DoctorAggregationHelper {
       specialty: '$specialty.name',
       currentOrganization: 1,
       experienceYears: 1,
+      totalExperienceYears: {
+        $ifNull: ['$experienceYears', '$calculatedExperienceYears', 0],
+      },
       averageRating: { $round: ['$averageRating', 1] },
       totalReviews: 1,
     };

@@ -25,3 +25,10 @@ export class Payment {
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
+
+// Performance indexes for common queries
+PaymentSchema.index({ userId: 1 }); // User payment history
+PaymentSchema.index({ appointmentId: 1 }); // Find payment by appointment
+PaymentSchema.index({ paystackReference: 1 }, { unique: true }); // Webhook lookups
+PaymentSchema.index({ status: 1 }); // Filter by payment status
+PaymentSchema.index({ userId: 1, createdAt: -1 }); // Payment history chronologically
