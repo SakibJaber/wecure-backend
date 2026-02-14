@@ -36,7 +36,7 @@ export class Appointment {
 
   @Prop({
     enum: Object.values(AppointmentStatus),
-    default: AppointmentStatus.UPCOMING,
+    default: AppointmentStatus.PENDING,
     index: true,
   })
   status: AppointmentStatus;
@@ -52,13 +52,26 @@ export class Appointment {
 
   @Prop({ default: false })
   reminder1hSent: boolean;
+
+  // Payout tracking
+  @Prop({ type: Types.ObjectId, ref: 'Payout' })
+  payoutId?: Types.ObjectId;
+
+  @Prop({ default: false })
+  isPaidOut: boolean;
+
+  @Prop()
+  payoutAmount?: number;
+
+  @Prop()
+  paidOutAt?: Date;
 }
 
 export const AppointmentSchema = SchemaFactory.createForClass(Appointment);
 
 AppointmentSchema.index(
   { doctorId: 1, appointmentDate: 1, appointmentTime: 1 },
-  { unique: true },
+  { unique: true, partialFilterExpression: { status: { $ne: 'CANCELLED' } } },
 );
 AppointmentSchema.index({ userId: 1, appointmentDate: -1 });
 AppointmentSchema.index({ doctorId: 1, appointmentDate: -1 });

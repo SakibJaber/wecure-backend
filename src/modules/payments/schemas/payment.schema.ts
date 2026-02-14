@@ -22,6 +22,19 @@ export class Payment {
 
   @Prop({ enum: ['PENDING', 'PAID', 'FAILED'], default: 'PENDING' })
   status: string;
+
+  // Refund tracking
+  @Prop({ type: Types.ObjectId, ref: 'Refund' })
+  refundId?: Types.ObjectId;
+
+  @Prop({ default: 0 })
+  refundedAmount: number;
+
+  @Prop({ default: false })
+  isRefunded: boolean;
+
+  @Prop()
+  refundedAt?: Date;
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);

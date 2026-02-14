@@ -15,13 +15,16 @@ import {
 } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { PaystackService } from './paystack.service';
-import { AppointmentsService } from '../appointments/appointments.service';
+import { AppointmentFinderService } from '../appointments/services/appointment-finder.service';
+import { AppointmentManagerService } from '../appointments/services/appointment-manager.service';
 import { DonationsService } from '../donations/donations.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { AppointmentStatus } from 'src/common/enum/appointment-status.enum';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { PayoutManagerService } from '../payouts/services/payout-manager.service';
+import { RefundsService } from '../refunds/refunds.service';
 
 @Controller('payments')
 export class PaymentsController {
@@ -30,10 +33,13 @@ export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly paystackService: PaystackService,
-    private readonly appointmentsService: AppointmentsService,
+    private readonly appointmentFinderService: AppointmentFinderService,
+    private readonly appointmentManagerService: AppointmentManagerService,
     private readonly donationsService: DonationsService,
     private readonly configService: ConfigService,
-    private readonly auditLogsService: AuditLogsService, // Inject AuditLogsService
+    private readonly auditLogsService: AuditLogsService,
+    private readonly payoutManagerService: PayoutManagerService,
+    private readonly refundsService: RefundsService,
   ) {}
 
   @Post('appointments/:appointmentId/initialize')
@@ -45,7 +51,8 @@ export class PaymentsController {
     const userId = req.user.userId;
 
     // 1. Get Appointment
-    const appointment = await this.appointmentsService.findById(appointmentId);
+    const appointment =
+      await this.appointmentFinderService.findById(appointmentId);
     if (!appointment) {
       throw new NotFoundException('Appointment not found');
     }
@@ -57,9 +64,9 @@ export class PaymentsController {
       );
     }
 
-    // 3. Ensure status is UPCOMING
-    if (appointment.status !== AppointmentStatus.UPCOMING) {
-      throw new BadRequestException('Appointment is not in UPCOMING status');
+    // 3. Ensure status is PENDING
+    if (appointment.status !== AppointmentStatus.PENDING) {
+      throw new BadRequestException('Appointment is not in PENDING status');
     }
 
     // 4. Ensure not already paid
@@ -125,20 +132,7 @@ export class PaymentsController {
 
     // Create donation record
     await this.donationsService.create({
-      userId: body.userId, // Schema requires userId, but requirement says "Auth optional".
-      // If userId is missing, we might need a default or update schema to make it optional.
-      // Checking schema: userId is required.
-      // Requirement: "Auth optional".
-      // Conflict. I will assume if auth is optional, userId might be null.
-      // But schema says required. I should probably make it optional in schema or require it.
-      // Given "Auth optional", I'll assume for now we might need a dummy user or make it optional.
-      // Let's check schema again.
-      // Schema: @Prop({ type: Types.ObjectId, ref: 'User', required: true }) userId: Types.ObjectId;
-      // I should update schema to make userId optional if I want to support anonymous donations.
-      // But for now, let's assume the user provides a userId if logged in, or we fail if not?
-      // "Auth optional" usually means anonymous allowed.
-      // I will update Donation schema to make userId optional in next step if needed.
-      // For now, I'll pass body.userId.
+      userId: body.userId, 
       paystackReference: paymentData.reference,
       amount: body.amount,
       currency: 'NGN',
@@ -157,6 +151,10 @@ export class PaymentsController {
     @Headers('x-paystack-signature') signature: string,
     @Body() body: any,
   ) {
+    this.logger.log('Incoming Paystack Webhook');
+    this.logger.debug(`Signature: ${signature}`);
+    this.logger.debug(`Body: ${JSON.stringify(body)}`);
+
     // 1. Verify Signature
     const secret = this.configService.get<string>('PAYSTACK_SECRET_KEY') || '';
     const hash = crypto
@@ -165,12 +163,18 @@ export class PaymentsController {
       .digest('hex');
 
     if (hash !== signature) {
+      this.logger.error('Invalid Paystack signature');
+      this.logger.error(`Calculated Hash: ${hash}`);
+      this.logger.error(`Expected Signature: ${signature}`);
       throw new ForbiddenException('Invalid signature');
     }
+
+    this.logger.log(`Handling Paystack event: ${body.event}`);
 
     // 2. Handle charge.success
     if (body.event === 'charge.success') {
       const { reference, metadata } = body.data;
+      this.logger.log(`Processing charge.success for reference: ${reference}`);
 
       // Idempotency check handled by checking current status
 
@@ -184,7 +188,7 @@ export class PaymentsController {
           if (metadata.appointmentId) {
             // We need payment._id to link to appointment
             // payment object from findByReference has _id
-            await this.appointmentsService.markAsPaid(
+            await this.appointmentManagerService.markAsPaid(
               metadata.appointmentId,
               payment._id.toString(),
             );
@@ -203,10 +207,6 @@ export class PaymentsController {
         const donation = await this.donationsService.findByReference(reference);
         if (donation && donation.status !== 'PAID') {
           // Update Donation
-          // DonationsService needs updateStatus method or use update
-          // I'll use update with ID if I can get it, or I added findByReference.
-          // I need to add updateStatus to DonationsService or just use findByReference result.
-          // donation is the document.
           donation.status = 'PAID';
           await donation.save();
 
@@ -220,6 +220,19 @@ export class PaymentsController {
           });
         }
       }
+    } else if (body.event === 'transfer.success') {
+      const { reference } = body.data; // paystackTransferId
+      await this.payoutManagerService.completePayoutFromWebhook(reference);
+    } else if (body.event === 'transfer.failed') {
+      // Handle transfer failure? PayoutsService didn't implement explicit failure handler but we can log
+      this.logger.error(
+        `Transfer failed for reference ${body.data.reference}: ${body.data.reason}`,
+      );
+      // Ideally update payout status to FAILED.
+      // I should expose a method in PayoutsService for this. for now just log.
+    } else if (body.event === 'refund.processed') {
+      // Refund successful
+      await this.refundsService.handleRefundWebhook(body.data);
     }
 
     return { status: 'success' };

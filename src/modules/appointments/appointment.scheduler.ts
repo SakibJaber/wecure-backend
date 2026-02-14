@@ -4,6 +4,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Model } from 'mongoose';
 import { AppointmentStatus } from 'src/common/enum/appointment-status.enum';
 import { Appointment, AppointmentDocument } from './schemas/appointment.schema';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class AppointmentSchedulerService {
@@ -12,35 +13,15 @@ export class AppointmentSchedulerService {
   constructor(
     @InjectModel(Appointment.name)
     private appointmentModel: Model<AppointmentDocument>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
-  @Cron(CronExpression.EVERY_30_MINUTES)
+  @Cron(CronExpression.EVERY_MINUTE)
   async handleAppointmentTransitions() {
     this.logger.debug('Running appointment status transition job...');
 
     const now = new Date();
     const currentTime = this.formatTime(now);
-
-    // 1. Transition UPCOMING -> ONGOING
-    // Criteria: Status is UPCOMING, Date is today or past, Time is reached
-    // Note: We check date <= today to catch any missed from previous days (though unlikely with 1min cron)
-    // Ideally, we check: (Date < Today) OR (Date == Today AND Time <= Now)
-
-    // However, since we store date and time separately, we need to be careful.
-    // Let's find appointments where:
-    // - Status is UPCOMING
-    // - Date is Today AND Time <= CurrentTime
-    // OR
-    // - Date is Before Today (should be marked ONGOING or maybe directly COMPLETED/MISSED?
-    //   For now, let's stick to the requirement: UPCOMING -> ONGOING when start time is reached.
-    //   If it's way past, it will eventually go to COMPLETED in the next step.
-
-    // Find UPCOMING appointments that should be ONGOING
-    // We need to query for:
-    // (date < today) OR (date == today AND time <= currentTime)
-
-    // To simplify, we can fetch candidates and filter in memory if volume is low,
-    // or construct a complex query. Given it's a cron, a query is better.
 
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
@@ -48,12 +29,13 @@ export class AppointmentSchedulerService {
     const todayEnd = new Date(now);
     todayEnd.setHours(23, 59, 59, 999);
 
-    // Update UPCOMING -> ONGOING
+    // 1. Transition UPCOMING -> ONGOING
+    // Criteria: Status is UPCOMING, Date is in the past OR (Date is today AND Time is reached)
     const upcomingResult = await this.appointmentModel.updateMany(
       {
         status: AppointmentStatus.UPCOMING,
         $or: [
-          { appointmentDate: { $lt: todayStart } }, // Past days
+          { appointmentDate: { $lt: todayStart } },
           {
             appointmentDate: { $gte: todayStart, $lte: todayEnd },
             appointmentTime: { $lte: currentTime },
@@ -72,14 +54,12 @@ export class AppointmentSchedulerService {
     }
 
     // 2. Transition ONGOING -> COMPLETED
-    // Criteria: Status is ONGOING, EndTime has passed
-    // (Date < Today) OR (Date == Today AND EndTime < CurrentTime)
-
+    // Criteria: Status is ONGOING, Date is in the past OR (Date is today AND EndTime has passed)
     const ongoingResult = await this.appointmentModel.updateMany(
       {
         status: AppointmentStatus.ONGOING,
         $or: [
-          { appointmentDate: { $lt: todayStart } }, // Past days
+          { appointmentDate: { $lt: todayStart } },
           {
             appointmentDate: { $gte: todayStart, $lte: todayEnd },
             appointmentEndTime: { $lt: currentTime },
@@ -102,5 +82,98 @@ export class AppointmentSchedulerService {
     const h = date.getHours().toString().padStart(2, '0');
     const m = date.getMinutes().toString().padStart(2, '0');
     return `${h}:${m}`;
+  }
+
+  @Cron(CronExpression.EVERY_30_MINUTES)
+  async handleReminders() {
+    this.logger.log('Running appointment reminder check...');
+
+    const now = new Date();
+
+    // 6 hours from now
+    const sixHoursLater = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+    const sixHoursWindow = new Date(sixHoursLater.getTime() + 10 * 60 * 1000); // +10 min window
+
+    // 1 hour from now
+    const oneHourLater = new Date(now.getTime() + 1 * 60 * 60 * 1000);
+    const oneHourWindow = new Date(oneHourLater.getTime() + 10 * 60 * 1000); // +10 min window
+
+    // Find appointments for 6h reminder
+    const sixHourAppointments = await this.findAppointmentsInWindow(
+      sixHoursLater,
+      sixHoursWindow,
+      'reminder6hSent',
+    );
+
+    for (const appointment of sixHourAppointments) {
+      this.notificationsService.emit('appointment.reminder', {
+        appointment,
+        type: '6H',
+      });
+
+      await this.appointmentModel.findByIdAndUpdate(appointment._id, {
+        reminder6hSent: true,
+      });
+    }
+
+    if (sixHourAppointments.length > 0) {
+      this.logger.log(`Sent ${sixHourAppointments.length} 6-hour reminders`);
+    }
+
+    // Find appointments for 1h reminder
+    const oneHourAppointments = await this.findAppointmentsInWindow(
+      oneHourLater,
+      oneHourWindow,
+      'reminder1hSent',
+    );
+
+    for (const appointment of oneHourAppointments) {
+      this.notificationsService.emit('appointment.reminder', {
+        appointment,
+        type: '1H',
+      });
+
+      await this.appointmentModel.findByIdAndUpdate(appointment._id, {
+        reminder1hSent: true,
+      });
+    }
+
+    if (oneHourAppointments.length > 0) {
+      this.logger.log(`Sent ${oneHourAppointments.length} 1-hour reminders`);
+    }
+  }
+
+  private async findAppointmentsInWindow(
+    windowStart: Date,
+    windowEnd: Date,
+    reminderFlag: 'reminder6hSent' | 'reminder1hSent',
+  ) {
+    const startDate = new Date(windowStart);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(windowEnd);
+    endDate.setHours(23, 59, 59, 999);
+
+    const appointments = await this.appointmentModel
+      .find({
+        appointmentDate: { $gte: startDate, $lte: endDate },
+        status: { $in: [AppointmentStatus.UPCOMING] },
+        [reminderFlag]: false,
+      })
+      .populate('userId', 'name email')
+      .populate({
+        path: 'doctorId',
+        populate: { path: 'userId', select: 'name email' },
+      })
+      .lean();
+
+    // Filter by actual datetime
+    return appointments.filter((apt) => {
+      const [hours, minutes] = apt.appointmentTime.split(':').map(Number);
+      const aptDateTime = new Date(apt.appointmentDate);
+      aptDateTime.setHours(hours, minutes, 0, 0);
+
+      return aptDateTime >= windowStart && aptDateTime <= windowEnd;
+    });
   }
 }

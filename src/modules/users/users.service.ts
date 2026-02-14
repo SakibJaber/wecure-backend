@@ -13,6 +13,7 @@ import { EncryptionService } from 'src/common/services/encryption.service';
 import { Role } from 'src/common/enum/role.enum';
 import { UserStatus } from 'src/common/enum/user.status.enum';
 import { CreateAdminDto } from './dto/create-admin.dto';
+import { AddUserBankDetailsDto } from './dto/add-user-bank-details.dto';
 
 @Injectable()
 export class UsersService {
@@ -112,6 +113,25 @@ export class UsersService {
         // Helper to try converting back to Date or keep string
         (user as any).dateOfBirth = decryptedDob;
       }
+
+      // Decrypt bank details if they exist
+      if (user.bankName) {
+        user.bankName = this.encryptionService.isEncrypted(user.bankName)
+          ? this.encryptionService.decrypt(user.bankName)
+          : user.bankName;
+      }
+      if (user.accountName) {
+        user.accountName = this.encryptionService.isEncrypted(user.accountName)
+          ? this.encryptionService.decrypt(user.accountName)
+          : user.accountName;
+      }
+      if (user.accountNumber) {
+        user.accountNumber = this.encryptionService.isEncrypted(
+          user.accountNumber,
+        )
+          ? this.encryptionService.decrypt(user.accountNumber)
+          : user.accountNumber;
+      }
     }
     return user;
   }
@@ -134,6 +154,25 @@ export class UsersService {
       if (user.dateOfBirth && typeof user.dateOfBirth === 'string') {
         const decryptedDob = this.encryptionService.decrypt(user.dateOfBirth);
         (user as any).dateOfBirth = decryptedDob;
+      }
+
+      // Decrypt bank details if they exist
+      if (user.bankName) {
+        user.bankName = this.encryptionService.isEncrypted(user.bankName)
+          ? this.encryptionService.decrypt(user.bankName)
+          : user.bankName;
+      }
+      if (user.accountName) {
+        user.accountName = this.encryptionService.isEncrypted(user.accountName)
+          ? this.encryptionService.decrypt(user.accountName)
+          : user.accountName;
+      }
+      if (user.accountNumber) {
+        user.accountNumber = this.encryptionService.isEncrypted(
+          user.accountNumber,
+        )
+          ? this.encryptionService.decrypt(user.accountNumber)
+          : user.accountNumber;
       }
     }
     return user;
@@ -309,6 +348,29 @@ export class UsersService {
           updatedUser.dateOfBirth,
         );
       }
+
+      // Decrypt bank details if they exist
+      if (updatedUser.bankName) {
+        updatedUser.bankName = this.encryptionService.isEncrypted(
+          updatedUser.bankName,
+        )
+          ? this.encryptionService.decrypt(updatedUser.bankName)
+          : updatedUser.bankName;
+      }
+      if (updatedUser.accountName) {
+        updatedUser.accountName = this.encryptionService.isEncrypted(
+          updatedUser.accountName,
+        )
+          ? this.encryptionService.decrypt(updatedUser.accountName)
+          : updatedUser.accountName;
+      }
+      if (updatedUser.accountNumber) {
+        updatedUser.accountNumber = this.encryptionService.isEncrypted(
+          updatedUser.accountNumber,
+        )
+          ? this.encryptionService.decrypt(updatedUser.accountNumber)
+          : updatedUser.accountNumber;
+      }
     }
 
     return updatedUser;
@@ -363,6 +425,25 @@ export class UsersService {
       if (user.phone) {
         user.phone = this.encryptionService.decrypt(user.phone) as string;
       }
+
+      // Decrypt bank details if they exist
+      if (user.bankName) {
+        user.bankName = this.encryptionService.isEncrypted(user.bankName)
+          ? this.encryptionService.decrypt(user.bankName)
+          : user.bankName;
+      }
+      if (user.accountName) {
+        user.accountName = this.encryptionService.isEncrypted(user.accountName)
+          ? this.encryptionService.decrypt(user.accountName)
+          : user.accountName;
+      }
+      if (user.accountNumber) {
+        user.accountNumber = this.encryptionService.isEncrypted(
+          user.accountNumber,
+        )
+          ? this.encryptionService.decrypt(user.accountNumber)
+          : user.accountNumber;
+      }
       return user;
     });
 
@@ -414,5 +495,21 @@ export class UsersService {
       { $pull: { fcmTokens: token } },
       { new: true },
     );
+  }
+
+  async addBankDetails(userId: string, dto: AddUserBankDetailsDto) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new BadRequestException('User not found');
+
+    const updateData = {
+      bankName: this.encryptionService.encrypt(dto.bankName),
+      accountName: this.encryptionService.encrypt(dto.accountName),
+      accountNumber: this.encryptionService.encrypt(dto.accountNumber),
+    };
+
+    return this.userModel
+      .findByIdAndUpdate(userId, updateData, { new: true })
+      .select('-password')
+      .lean();
   }
 }

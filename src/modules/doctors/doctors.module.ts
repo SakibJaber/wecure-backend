@@ -19,6 +19,9 @@ import { UsersModule } from '../users/users.module';
 import { DoctorAggregationHelper } from './helpers/doctor-aggregation.helper';
 import { DoctorRatingHelper } from './helpers/doctor-rating.helper';
 import { DoctorSlotsHelper } from './helpers/doctor-slots.helper';
+import { DoctorManagementService } from './services/doctor-management.service';
+import { DoctorAdminService } from './services/doctor-admin.service';
+import { DoctorPublicService } from './services/doctor-public.service';
 
 @Module({
   imports: [
@@ -36,6 +39,9 @@ import { DoctorSlotsHelper } from './helpers/doctor-slots.helper';
   controllers: [DoctorsController],
   providers: [
     DoctorsService,
+    DoctorManagementService,
+    DoctorAdminService,
+    DoctorPublicService,
     DoctorAggregationHelper,
     DoctorRatingHelper,
     DoctorSlotsHelper,

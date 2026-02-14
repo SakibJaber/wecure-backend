@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
@@ -86,6 +87,194 @@ export class PaystackService {
         error.response?.data || error.message,
       );
       throw new InternalServerErrorException('Payment verification failed');
+    }
+  }
+
+  /**
+   * Initiate a refund for a transaction
+   */
+  async initiateRefund(
+    reference: string,
+    amount?: number,
+    merchantNote?: string,
+  ) {
+    try {
+      const payload: any = { transaction: reference };
+      if (amount) payload.amount = amount * 100; // Convert to kobo
+      if (merchantNote) payload.merchant_note = merchantNote;
+
+      const response = await lastValueFrom(
+        this.httpService.post(`${this.baseUrl}/refund`, payload, {
+          headers: {
+            Authorization: `Bearer ${this.secretKey}`,
+            'Content-Type': 'application/json',
+          },
+        }),
+      );
+
+      return response.data.data;
+    } catch (error) {
+      const errorData = error.response?.data;
+      this.logger.error(
+        `Error initiating refund for ${reference}`,
+        errorData || error.message,
+      );
+
+      const message = errorData?.message || 'Refund initiation failed';
+      // Use BadRequestException for better client-side error reporting (e.g., "Cannot refund less than NGN50")
+      throw new BadRequestException(`Paystack Error: ${message}`);
+    }
+  }
+
+  /**
+   * Verify refund status
+   */
+  async verifyRefund(reference: string) {
+    try {
+      const response = await lastValueFrom(
+        this.httpService.get(`${this.baseUrl}/refund/${reference}`, {
+          headers: {
+            Authorization: `Bearer ${this.secretKey}`,
+          },
+        }),
+      );
+      return response.data.data;
+    } catch (error) {
+      this.logger.error(
+        `Error verifying refund: ${reference}`,
+        error.response?.data || error.message,
+      );
+      throw new InternalServerErrorException('Refund verification failed');
+    }
+  }
+
+  /**
+   * Create a transfer recipient (for doctor payouts)
+   */
+  async createTransferRecipient(
+    name: string,
+    accountNumber: string,
+    bankCode: string,
+  ) {
+    try {
+      this.logger.debug(
+        `Creating transfer recipient: ${JSON.stringify({
+          type: 'nuban',
+          name,
+          account_number: accountNumber,
+          bank_code: bankCode,
+          currency: 'NGN',
+        })}`,
+      );
+      const response = await lastValueFrom(
+        this.httpService.post(
+          `${this.baseUrl}/transferrecipient`,
+          {
+            type: 'nuban',
+            name,
+            account_number: accountNumber,
+            bank_code: bankCode,
+            currency: 'NGN',
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${this.secretKey}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+      return response.data.data;
+    } catch (error) {
+      this.logger.error(
+        'Error creating transfer recipient',
+        error.response?.data || error.message,
+      );
+      throw new InternalServerErrorException(
+        'Transfer recipient creation failed',
+      );
+    }
+  }
+
+  /**
+   * Initiate a transfer (payout to doctor)
+   */
+  async initiateTransfer(
+    recipientCode: string,
+    amount: number,
+    reason: string,
+    reference: string,
+  ) {
+    try {
+      const response = await lastValueFrom(
+        this.httpService.post(
+          `${this.baseUrl}/transfer`,
+          {
+            source: 'balance',
+            recipient: recipientCode,
+            amount: amount * 100, // Convert to kobo
+            reason,
+            reference,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${this.secretKey}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+      return response.data.data;
+    } catch (error) {
+      this.logger.error(
+        'Error initiating transfer',
+        error.response?.data || error.message,
+      );
+      throw new InternalServerErrorException('Transfer initiation failed');
+    }
+  }
+
+  /**
+   * Verify transfer status
+   */
+  async verifyTransfer(reference: string) {
+    try {
+      const response = await lastValueFrom(
+        this.httpService.get(`${this.baseUrl}/transfer/verify/${reference}`, {
+          headers: {
+            Authorization: `Bearer ${this.secretKey}`,
+          },
+        }),
+      );
+      return response.data.data;
+    } catch (error) {
+      this.logger.error(
+        `Error verifying transfer: ${reference}`,
+        error.response?.data || error.message,
+      );
+      throw new InternalServerErrorException('Transfer verification failed');
+    }
+  }
+
+  /**
+   * List Nigerian banks (helper for getting bank codes)
+   */
+  async listBanks() {
+    try {
+      const response = await lastValueFrom(
+        this.httpService.get(`${this.baseUrl}/bank?currency=NGN`, {
+          headers: {
+            Authorization: `Bearer ${this.secretKey}`,
+          },
+        }),
+      );
+      return response.data.data;
+    } catch (error) {
+      this.logger.error(
+        'Error fetching banks list',
+        error.response?.data || error.message,
+      );
+      throw new InternalServerErrorException('Failed to fetch banks');
     }
   }
 }

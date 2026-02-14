@@ -19,6 +19,9 @@ export class AuditLog {
 
   @Prop()
   ipAddress: string;
+
+  @Prop({ type: Object })
+  metadata?: Record<string, any>;
 }
 
 export const AuditLogSchema = SchemaFactory.createForClass(AuditLog);

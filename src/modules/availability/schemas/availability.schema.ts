@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Types, Document } from 'mongoose';
-import { DayOfWeek } from '../../../common/enum/days.enum';
+import { DayOfWeek } from 'src/common/enum/days.enum';
 
 export type AvailabilityDocument = DoctorAvailability & Document;
 
@@ -29,7 +29,7 @@ export class DoctorAvailability {
   @Prop({ default: true })
   isActive: boolean;
 
-  @Prop({ required: true, default: 0 })
+  @Prop({ required: true, default: 0, min: 50 }) // Paystack minimum refund amount is 50 NGN
   fee: number;
 }
 

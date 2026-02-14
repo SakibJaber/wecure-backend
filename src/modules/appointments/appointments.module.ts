@@ -1,9 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { AppointmentsService } from './appointments.service';
 import { AppointmentsController } from './appointments.controller';
 import { AppointmentSchedulerService } from './appointment.scheduler';
-import { AppointmentReminderScheduler } from './appointment-reminder.scheduler';
 import { Appointment, AppointmentSchema } from './schemas/appointment.schema';
 import {
   AppointmentAttachment,
@@ -14,6 +12,11 @@ import { AvailabilityModule } from '../availability/availability.module';
 import { DoctorsModule } from '../doctors/doctors.module';
 import { AgoraModule } from '../agora/agora.module';
 import { UploadsModule } from '../uploads/uploads.module';
+import { RefundsModule } from '../refunds/refunds.module';
+import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
+import { AppointmentFinderService } from 'src/modules/appointments/services/appointment-finder.service';
+import { AppointmentManagerService } from 'src/modules/appointments/services/appointment-manager.service';
+import { AppointmentValidatorService } from 'src/modules/appointments/services/appointment-validator.service';
 
 @Module({
   imports: [
@@ -24,18 +27,25 @@ import { UploadsModule } from '../uploads/uploads.module';
         schema: AppointmentAttachmentSchema,
       },
       { name: Doctor.name, schema: DoctorSchema },
+      { name: Review.name, schema: ReviewSchema },
     ]),
     AvailabilityModule,
     DoctorsModule,
     AgoraModule,
     UploadsModule,
+    RefundsModule,
   ],
   controllers: [AppointmentsController],
   providers: [
-    AppointmentsService,
     AppointmentSchedulerService,
-    AppointmentReminderScheduler,
+    AppointmentValidatorService,
+    AppointmentFinderService,
+    AppointmentManagerService,
   ],
-  exports: [AppointmentsService],
+  exports: [
+    AppointmentValidatorService,
+    AppointmentFinderService,
+    AppointmentManagerService,
+  ],
 })
 export class AppointmentsModule {}

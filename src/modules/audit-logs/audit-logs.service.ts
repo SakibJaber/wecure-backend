@@ -18,6 +18,7 @@ export class AuditLogsService implements IUploadAuditLogger {
     resource: string;
     resourceId?: string;
     ipAddress?: string;
+    metadata?: Record<string, any>;
   }) {
     return this.auditLogModel.create({
       userId: data.userId,
@@ -25,6 +26,7 @@ export class AuditLogsService implements IUploadAuditLogger {
       resource: data.resource,
       resourceId: data.resourceId,
       ipAddress: data.ipAddress,
+      metadata: data.metadata,
     });
   }
 
@@ -61,6 +63,7 @@ export class AuditLogsService implements IUploadAuditLogger {
     const [data, total] = await Promise.all([
       this.auditLogModel
         .find(query)
+        .populate('userId', 'name')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(filters.limit)
@@ -81,8 +84,7 @@ export class AuditLogsService implements IUploadAuditLogger {
     this.create({
       userId,
       action: 'UPLOAD_PRIVATE_FILE',
-      resource: 'S3_OBJECT',
-      resourceId: fileKey,
+      resource: fileKey,
     });
   }
 
@@ -90,8 +92,7 @@ export class AuditLogsService implements IUploadAuditLogger {
     this.create({
       userId,
       action: 'GENERATE_VIEW_URL',
-      resource: 'S3_OBJECT',
-      resourceId: fileKey,
+      resource: fileKey,
     });
   }
 }

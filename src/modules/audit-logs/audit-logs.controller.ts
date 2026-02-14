@@ -1,18 +1,17 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AuditLogsService } from './audit-logs.service';
-// import { Roles } from '../../common/decorators/roles.decorator';
-// import { RolesGuard } from '../../common/guards/roles.guard';
-// import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/common/guards/roles.guard';
+import { Role } from 'src/common/enum/role.enum';
 
 @Controller('admin/audit-logs')
-// @UseGuards(JwtAuthGuard, RolesGuard)
-// @Roles('ADMIN')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN)
 export class AuditLogsController {
   constructor(private readonly auditLogsService: AuditLogsService) {}
 
-  /**
-   * Get audit logs (paginated & filterable)
-   */
+  // Get audit logs (paginated & filterable)
   @Get()
   async getAuditLogs(
     @Query('userId') userId?: string,

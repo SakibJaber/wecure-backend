@@ -20,6 +20,15 @@ export class Doctor {
   @Prop()
   about: string;
 
+  @Prop()
+  bankName?: string;
+
+  @Prop()
+  accountName?: string;
+
+  @Prop()
+  accountNumber?: string;
+
   @Prop({ type: [String], default: [] })
   verificationDocuments: string[];
 
@@ -35,6 +44,23 @@ export class Doctor {
 
   @Prop({ default: false })
   isVerified: boolean;
+
+  // Paystack transfer recipient tracking
+  @Prop()
+  paystackRecipientCode?: string;
+
+  @Prop()
+  recipientCreatedAt?: Date;
+
+  // Earnings tracking
+  @Prop({ default: 0 })
+  totalEarnings: number; // Lifetime earnings (100%)
+
+  @Prop({ default: 0 })
+  totalPayouts: number; // Total paid out (90%)
+
+  @Prop({ default: 0 })
+  pendingPayouts: number; // Awaiting payout
 }
 
 export const DoctorSchema = SchemaFactory.createForClass(Doctor);

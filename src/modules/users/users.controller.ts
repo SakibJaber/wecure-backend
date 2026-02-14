@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { AddUserBankDetailsDto } from './dto/add-user-bank-details.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { RolesGuard } from 'src/common/guards/roles.guard';
@@ -103,6 +104,27 @@ export class UsersController {
         success: false,
         statusCode: error.status || 400,
         message: error.message || 'Failed to change password',
+        data: null,
+      };
+    }
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('me/bank-details')
+  async addBankDetails(@Req() req, @Body() dto: AddUserBankDetailsDto) {
+    try {
+      const user = await this.usersService.addBankDetails(req.user.userId, dto);
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Bank details updated successfully',
+        data: user,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to update bank details',
         data: null,
       };
     }

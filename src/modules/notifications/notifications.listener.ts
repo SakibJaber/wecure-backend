@@ -30,8 +30,8 @@ export class NotificationsListener {
     await this.notificationsService.createInAppNotification(
       userId,
       NotificationType.APPOINTMENT_CREATED,
-      'Appointment Created',
-      `Your appointment on ${dateStr} at ${appointmentTime} has been scheduled.`,
+      'Appointment Request Submitted',
+      `Your appointment request for ${dateStr} at ${appointmentTime} has been submitted. Awaiting doctor approval.`,
       { appointmentId: payload._id, role: 'PATIENT' },
     );
 
@@ -39,8 +39,8 @@ export class NotificationsListener {
     await this.notificationsService.createInAppNotification(
       doctorId,
       NotificationType.APPOINTMENT_CREATED,
-      'New Appointment',
-      `You have a new appointment on ${dateStr} at ${appointmentTime}.`,
+      'New Appointment Request',
+      `You have a new appointment request for ${dateStr} at ${appointmentTime}. Please review and accept/reject.`,
       { appointmentId: payload._id, role: 'DOCTOR' },
     );
 
@@ -386,6 +386,78 @@ export class NotificationsListener {
       this.logger.error(
         `Failed to send password reset OTP email to ${payload.email}`,
         error,
+      );
+    }
+  }
+
+  @OnEvent('appointment.accepted')
+  async handleAppointmentAccepted(payload: any) {
+    const {
+      appointmentId,
+      userId,
+      doctorId,
+      appointmentDate,
+      appointmentTime,
+    } = payload;
+    this.logger.log(
+      `Handling appointment.accepted for appointment ${appointmentId}`,
+    );
+
+    const dateStr = new Date(appointmentDate).toLocaleDateString();
+
+    // Notify Patient
+    await this.notificationsService.createInAppNotification(
+      userId,
+      NotificationType.APPOINTMENT_UPDATED,
+      'Appointment Confirmed',
+      `Your appointment for ${dateStr} at ${appointmentTime} has been confirmed by the doctor.`,
+      { appointmentId },
+    );
+
+    // Send email to patient
+    const patient = await this.usersService.findById(userId);
+    if (patient && patient.email) {
+      await this.mailService.sendEmail(
+        patient.email,
+        'Appointment Confirmed',
+        `Good news! Your appointment on ${dateStr} at ${appointmentTime} has been confirmed by the doctor.`,
+      );
+    }
+  }
+
+  @OnEvent('appointment.rejected')
+  async handleAppointmentRejected(payload: any) {
+    const {
+      appointmentId,
+      userId,
+      doctorId,
+      appointmentDate,
+      appointmentTime,
+      reason,
+    } = payload;
+    this.logger.log(
+      `Handling appointment.rejected for appointment ${appointmentId}`,
+    );
+
+    const dateStr = new Date(appointmentDate).toLocaleDateString();
+    const reasonText = reason ? ` Reason: ${reason}` : '';
+
+    // Notify Patient
+    await this.notificationsService.createInAppNotification(
+      userId,
+      NotificationType.APPOINTMENT_CANCELLED,
+      'Appointment Request Declined',
+      `Your appointment request for ${dateStr} at ${appointmentTime} was declined by the doctor.${reasonText}`,
+      { appointmentId },
+    );
+
+    // Send email to patient
+    const patient = await this.usersService.findById(userId);
+    if (patient && patient.email) {
+      await this.mailService.sendEmail(
+        patient.email,
+        'Appointment Request Declined',
+        `Unfortunately, your appointment request for ${dateStr} at ${appointmentTime} was declined by the doctor.${reasonText}`,
       );
     }
   }

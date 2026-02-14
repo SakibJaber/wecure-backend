@@ -19,6 +19,8 @@ import { ContactSupportModule } from './contact-support/contact-support.module';
 import { LegalContentModule } from './legal-content/legal-content.module';
 import { SeederModule } from 'src/modules/seeder/seeder.module';
 import { AgoraModule } from 'src/modules/agora/agora.module';
+import { RefundsModule } from './refunds/refunds.module';
+import { PayoutsModule } from './payouts/payouts.module';
 
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { AgoraModule } from 'src/modules/agora/agora.module';
     PublicUploadModule,
     ContactSupportModule,
     LegalContentModule,
+    RefundsModule,
+    PayoutsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

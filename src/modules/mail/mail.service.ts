@@ -47,7 +47,40 @@ export class MailService {
 
   async sendEmail(to: string, subject: string, text: string) {
     try {
-      const templatePath = path.join(__dirname, 'templates', 'email.ejs');
+      let templatePath = path.join(__dirname, 'templates', 'email.ejs');
+
+      // Robust path resolution fallback for production/build environments
+      if (!require('fs').existsSync(templatePath)) {
+        // Try to find it relative to the process root if __dirname resolution fails
+        const rootTemplatePath = path.join(
+          process.cwd(),
+          'dist',
+          'modules',
+          'mail',
+          'templates',
+          'email.ejs',
+        );
+        if (require('fs').existsSync(rootTemplatePath)) {
+          templatePath = rootTemplatePath;
+        } else {
+          // Third fallback: dist/src/... (just in case)
+          const srcTemplatePath = path.join(
+            process.cwd(),
+            'dist',
+            'src',
+            'modules',
+            'mail',
+            'templates',
+            'email.ejs',
+          );
+          if (require('fs').existsSync(srcTemplatePath)) {
+            templatePath = srcTemplatePath;
+          }
+        }
+      }
+
+      this.logger.debug(`Using mail template at: ${templatePath}`);
+
       const html = await ejs.renderFile(templatePath, {
         title: subject,
         content: text

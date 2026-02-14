@@ -11,7 +11,6 @@ import {
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
-import { AppointmentsService } from './appointments.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AppointmentAccessGuard } from '../../common/guards/appointment-access.guard';
@@ -20,14 +19,21 @@ import { Role } from 'src/common/enum/role.enum';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
 import { AddAppointmentAttachmentDto } from './dto/add-appointment-attachment.dto';
+import { RejectAppointmentDto } from './dto/reject-appointment.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PrivateUploadService } from '../uploads/private-upload.service';
+import { AppointmentStatus } from 'src/common/enum/appointment-status.enum';
+import { AppointmentManagerService } from './services/appointment-manager.service';
+import { AppointmentFinderService } from './services/appointment-finder.service';
+import { AppointmentValidatorService } from './services/appointment-validator.service';
 
 @Controller('appointments')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AppointmentsController {
   constructor(
-    private readonly appointmentsService: AppointmentsService,
+    private readonly managerService: AppointmentManagerService,
+    private readonly finderService: AppointmentFinderService,
+    private readonly validatorService: AppointmentValidatorService,
     private readonly privateUploadService: PrivateUploadService,
   ) {}
 
@@ -48,11 +54,13 @@ export class AppointmentsController {
       );
 
       // Create attachment record
-      const attachmentInfo =
-        await this.appointmentsService.createAttachmentInfo(req.user.userId, {
+      const attachmentInfo = await this.managerService.createAttachmentInfo(
+        req.user.userId,
+        {
           fileKey,
           fileType: attachment.mimetype,
-        });
+        },
+      );
 
       // Add to dto
       if (!dto.attachmentIds) {
@@ -65,34 +73,121 @@ export class AppointmentsController {
       dto.attachmentIds.push(attachmentInfo._id.toString());
     }
 
-    return this.appointmentsService.create(req.user.userId, dto);
+    const data = await this.managerService.create(req.user.userId, dto);
+    return {
+      success: true,
+      statusCode: 201,
+      message: 'Appointment created successfully',
+      data,
+    };
   }
 
   @Roles(Role.USER)
   @Get('me')
-  getMine(@Req() req) {
-    return this.appointmentsService.getForUser(req.user.userId);
+  async getMine(@Req() req, @Query() query) {
+    const { data, ...meta } = await this.finderService.getForUser(
+      req.user.userId,
+      query,
+    );
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Patient appointments fetched successfully',
+      data,
+      meta,
+    };
+  }
+
+  @Roles(Role.USER)
+  @Get('me/:id')
+  async getAppointmentDetails(@Req() req, @Param('id') id: string) {
+    const data = await this.finderService.getAppointmentDetails(
+      id,
+      req.user.userId,
+    );
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Appointment details fetched successfully',
+      data,
+    };
+  }
+
+  @Roles(Role.USER)
+  @Patch('me/:id/cancel')
+  async cancelAppointment(@Req() req, @Param('id') id: string) {
+    await this.managerService.updateStatus(
+      id,
+      req.user.userId,
+      Role.USER,
+      AppointmentStatus.CANCELLED,
+    );
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Appointment cancelled successfully',
+    };
   }
 
   @Roles(Role.USER)
   @Get('available-dates')
-  getAvailableDates(
+  async getAvailableDates(
     @Query('doctorId') doctorId: string,
     @Query('days') days?: number,
   ) {
-    return this.appointmentsService.getAvailableDates(doctorId, days);
+    const data = await this.validatorService.getAvailableDates(doctorId, days);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Available dates fetched successfully',
+      data,
+    };
   }
 
   @Roles(Role.USER)
   @Get('available-slots')
-  getAvailableSlots(
+  async getAvailableSlots(
     @Query('doctorId') doctorId: string,
     @Query('date') date: string,
   ) {
-    return this.appointmentsService.getAvailableSlots(doctorId, new Date(date));
+    const data = await this.validatorService.getAvailableSlots(
+      doctorId,
+      new Date(date),
+    );
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Available slots fetched successfully',
+      data,
+    };
   }
 
   // Admin
+  @Roles(Role.ADMIN)
+  @Get('admin/all')
+  async getAllForAdmin(@Query() query) {
+    const { data, ...meta } = await this.finderService.getAll(query);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'All appointments fetched successfully',
+      data,
+      meta,
+    };
+  }
+
+  @Roles(Role.ADMIN)
+  @Get('admin/details/:id')
+  async getDetailsForAdmin(@Param('id') id: string) {
+    const data = await this.finderService.getDetailsForAdmin(id);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Appointment details fetched successfully',
+      data,
+    };
+  }
+
   @Roles(Role.ADMIN)
   @Get('admin/doctor/:doctorId')
   async getDoctorAppointmentsForAdmin(
@@ -100,7 +195,7 @@ export class AppointmentsController {
     @Param('doctorId') doctorId: string,
     @Query() query,
   ) {
-    const { data, ...meta } = await this.appointmentsService.getForDoctor(
+    const { data, ...meta } = await this.finderService.getForDoctor(
       req.user.userId,
       doctorId,
       query,
@@ -118,7 +213,7 @@ export class AppointmentsController {
   @Roles(Role.DOCTOR)
   @Get('doctor')
   async getDoctorAppointments(@Req() req, @Query() query) {
-    const { data, ...meta } = await this.appointmentsService.getForDoctor(
+    const { data, ...meta } = await this.finderService.getForDoctor(
       req.user.userId,
       req.user.doctorId,
       query,
@@ -132,9 +227,45 @@ export class AppointmentsController {
     };
   }
 
+  @Roles(Role.DOCTOR)
+  @Get('doctor/:id')
+  async getAppointmentDetailsForDoctor(@Req() req, @Param('id') id: string) {
+    const data = await this.finderService.getAppointmentDetailsForDoctor(
+      id,
+      req.user.userId,
+      req.user.doctorId,
+    );
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Appointment details fetched successfully',
+      data,
+    };
+  }
+
+  @Roles(Role.DOCTOR)
+  @Post('doctor/:id/reject')
+  async rejectAppointment(
+    @Req() req,
+    @Param('id') id: string,
+    @Body() dto: RejectAppointmentDto,
+  ) {
+    const data = await this.managerService.rejectAppointment(
+      id,
+      req.user.userId,
+      dto,
+    );
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Appointment rejected successfully',
+      data,
+    };
+  }
+
   // Status update (doctor or patient)
   @Patch(':id/status')
-  updateStatus(
+  async updateStatus(
     @Req() req,
     @Param('id') id: string,
     @Body() dto: UpdateAppointmentStatusDto,
@@ -143,13 +274,20 @@ export class AppointmentsController {
     const requesterId =
       req.user.role === Role.DOCTOR ? req.user.userId : req.user.userId;
 
-    return this.appointmentsService.updateStatus(
+    const data = await this.managerService.updateStatus(
       id,
       requesterId,
       req.user.role,
       dto.status,
       req.user.doctorId,
     );
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Appointment status updated successfully',
+      data,
+    };
   }
 
   // Attachments
@@ -169,7 +307,16 @@ export class AppointmentsController {
       dto.fileKey = fileKey;
       dto.fileType = file.mimetype;
     }
-    return this.appointmentsService.createAttachmentInfo(req.user.userId, dto);
+    const data = await this.managerService.createAttachmentInfo(
+      req.user.userId,
+      dto,
+    );
+    return {
+      success: true,
+      statusCode: 201,
+      message: 'Attachment info created successfully',
+      data,
+    };
   }
 
   @Post(':id/attachments')
@@ -193,37 +340,51 @@ export class AppointmentsController {
       dto.fileType = file.mimetype;
     }
 
-    return this.appointmentsService.addAttachment(
+    const data = await this.managerService.addAttachment(
       id,
       requesterId,
       req.user.role,
       dto,
       req.user.doctorId,
     );
+
+    return {
+      success: true,
+      statusCode: 201,
+      message: 'Attachment added successfully',
+      data,
+    };
   }
 
   // Agora Video Token
   @UseGuards(AppointmentAccessGuard)
   @Post(':id/video/token')
-  getVideoToken(@Req() req, @Param('id') id: string) {
+  async getVideoToken(@Req() req, @Param('id') id: string) {
     const user = req.user;
-    // Use userId or doctorId as the UID for Agora
-    // For simplicity and uniqueness, we can use the numeric timestamp of the ID creation or hash it
-    // But Agora UID must be int (for buildTokenWithUid) or string (for buildTokenWithAccount)
-    // We used buildTokenWithAccount in service if string is passed, so we can pass the string ID directly.
-    // However, let's use the user's ID from the token.
     const uid = user.userId;
     const channelName = `appointment_${id}`;
-    return this.appointmentsService.generateAgoraToken(channelName, uid);
+    const data = await this.managerService.generateAgoraToken(channelName, uid);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Video token generated successfully',
+      data,
+    };
   }
 
   // Agora Chat Token
   @UseGuards(AppointmentAccessGuard)
   @Post(':id/chat/token')
-  getChatToken(@Req() req, @Param('id') id: string) {
+  async getChatToken(@Req() req, @Param('id') id: string) {
     const user = req.user;
     const uid = user.userId;
     const channelName = `appointment_${id}`;
-    return this.appointmentsService.generateAgoraToken(channelName, uid);
+    const data = await this.managerService.generateAgoraToken(channelName, uid);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Chat token generated successfully',
+      data,
+    };
   }
 }

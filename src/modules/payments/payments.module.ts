@@ -9,17 +9,23 @@ import { Payment, PaymentSchema } from './schemas/payment.schema';
 import { AppointmentsModule } from '../appointments/appointments.module';
 import { DonationsModule } from '../donations/donations.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
+import { forwardRef } from '@nestjs/common';
+import { PayoutsModule } from '../payouts/payouts.module';
+import { RefundsModule } from '../refunds/refunds.module';
 
 @Module({
   imports: [
     HttpModule,
     ConfigModule,
     MongooseModule.forFeature([{ name: Payment.name, schema: PaymentSchema }]),
-    AppointmentsModule,
+    forwardRef(() => AppointmentsModule),
     DonationsModule,
     AuditLogsModule,
+    forwardRef(() => PayoutsModule),
+    forwardRef(() => RefundsModule),
   ],
   controllers: [PaymentsController],
   providers: [PaymentsService, PaystackService],
+  exports: [PaymentsService, PaystackService],
 })
 export class PaymentsModule {}

@@ -340,6 +340,35 @@ Most endpoints require a Bearer Token.
 }
 ```
 
+### Add Bank Details
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/doctors/me/bank-details`
+- **Description:** Add bank details for payments.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "bankName": "First Bank",
+  "accountName": "John Doe",
+  "accountNumber": "1234567890"
+}
+```
+
+### Get New Doctors (Admin)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/doctors/admin/new-doctors`
+- **Description:** Get all doctors with PENDING status. Admin only.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Query Params:**
+  - `page`: (number)
+  - `limit`: (number)
+  - `search`: (string)
+
 ### Get All Doctors (Admin)
 
 - **Method:** `GET`
@@ -368,6 +397,14 @@ Most endpoints require a Bearer Token.
   "note": "Documents verified." // Optional
 }
 ```
+
+### Get Doctor Details (Admin)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/doctors/admin/:id`
+- **Description:** Get full doctor details including documents for verification. Admin only.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
 
 ### Get Public Doctor Profile
 
@@ -585,6 +622,64 @@ Most endpoints require a Bearer Token.
   - `file`: (file)
   - `fileType`: (string) // Optional
   - `fileKey`: (string) // Optional
+
+### Get Appointment Details (Patient)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/appointments/me/:id`
+- **Description:** Get full details of a specific appointment for the patient.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Cancel Appointment (Patient)
+
+- **Method:** `PATCH`
+- **URL:** `{{baseUrl}}/appointments/me/:id/cancel`
+- **Description:** Cancel an appointment. Patient only.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Get Doctor Appointments (Admin)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/appointments/admin/doctor/:doctorId`
+- **Description:** Get all appointments for a specific doctor. Admin only.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Query Params:**
+  - `page`: (number)
+  - `limit`: (number)
+
+### Get Appointment Details (Doctor)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/appointments/doctor/:id`
+- **Description:** Get full details of a specific appointment for the doctor.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Accept Appointment (Doctor)
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/appointments/doctor/:id/accept`
+- **Description:** Accept a pending appointment. Doctor only.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Reject Appointment (Doctor)
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/appointments/doctor/:id/reject`
+- **Description:** Reject a pending appointment with a reason. Doctor only.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "reason": "Doctor unavailable on this day"
+}
+```
 
 ### Get Video Token
 
@@ -1181,3 +1276,131 @@ Most endpoints require a Bearer Token.
 - **Description:** Mark all notifications for the current user as read.
 - **Headers:**
   - `Authorization`: `Bearer <accessToken>`
+
+## Payouts Module
+
+### Get Due Payouts (Admin)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/payouts/admin/due`
+- **Description:** Get a preview of all doctors who are due for payout. Shows total earnings, platform commission (10%), and final payout amount. Decrypts bank details for display.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Get Payout History (Admin)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/payouts/admin/history`
+- **Description:** Get the history of all created payout records.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Query Params:**
+  - `doctorId`: (string) Filter by doctor ID
+  - `batchId`: (string) Filter by batch ID (e.g., "2026-02")
+
+### Create Payout Batch (Admin)
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/payouts/admin/batch`
+- **Description:** Manually trigger the creation of a payout batch. Groups unpaid completed appointments by doctor.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Body:**
+
+```json
+{
+  "batchId": "2026-02" // Optional, groups payouts. Defaults to current YYYY-MM.
+}
+```
+
+### Process Payout (Admin)
+
+- **Method:** `POST`
+- **URL:** `{{baseUrl}}/payouts/admin/:payoutId/process`
+- **Description:** Process a specific payout record. Initiates transfer via Paystack.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+## Refunds Module
+
+### Get All Refunds (Admin)
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/refunds`
+- **Description:** Get all refunds with filtering.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+- **Query Params:**
+  - `page`: (number)
+  - `limit`: (number)
+  - `status`: (string) // PENDING, PROCESSING, COMPLETED, FAILED
+  - `appointmentId`: (string)
+  - `paymentId`: (string)
+
+### Get My Refunds
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/refunds/me`
+- **Description:** Get refunds for the current user (Patient or Doctor).
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+### Get Refund by ID
+
+- **Method:** `GET`
+- **URL:** `{{baseUrl}}/refunds/:id`
+- **Description:** Get a single refund by ID.
+- **Headers:**
+  - `Authorization`: `Bearer <accessToken>`
+
+---
+
+## 💸 Financial Flows
+
+### 1. Payment Flow (Patient)
+
+1.  **Book Appointment:**
+    - Endpoint: `POST /appointments`
+    - Result: Appointment created with status `PENDING`.
+2.  **Initialize Payment:**
+    - Endpoint: `POST /payments/appointments/:appointmentId/initialize`
+    - Result: Returns Paystack `authorization_url`.
+3.  **Complete Payment:**
+    - Patient completes payment on Paystack gateway.
+4.  **Verification (Webhook):**
+    - Paystack sends `charge.success` event to `POST /payments/webhook/paystack`.
+    - Backend updates Payment status to `PAID`.
+    - Backend updates Appointment status to `UPCOMING` (or `PAID` internally).
+
+### 2. Payout Flow (Doctor Earnings)
+
+1.  **Appointment Completion:**
+    - Appointment is marked `COMPLETED` by Doctor or Patient.
+2.  **Batch Creation:**
+    - System (Scheduler or Admin via `POST /payouts/admin/batch`) aggregates unpaid, completed appointments.
+    - Calculates totals:
+      - **Total Earnings:** 100% of consultation fees.
+      - **Platform Commission:** 10%.
+      - **Payout Amount:** 90% (to Doctor).
+    - Creates `Payout` record with status `PENDING`.
+3.  **Processing:**
+    - Admin reviews and triggers `POST /payouts/admin/:payoutId/process`.
+    - Backend initiates Transfer via Paystack.
+    - Payout status updates to `PROCESSING`.
+4.  **Completion (Webhook):**
+    - Paystack sends `transfer.success` event.
+    - Backend updates Payout status to `COMPLETED`.
+    - Backend marks included Appointments as `isPaidOut = true`.
+
+### 3. Refund Flow
+
+1.  **Trigger:**
+    - **Doctor Rejects:** `POST /appointments/doctor/:id/reject` -> Triggers **100% Refund**.
+    - **Patient Cancels:** `PATCH /appointments/me/:id/cancel` -> Triggers **Refund** (Partial/Full based on policy).
+2.  **Processing:**
+    - System automatically creates `Refund` record (`PENDING`).
+    - System calls Paystack Refund API.
+    - Refund status updates to `PROCESSING`.
+3.  **Completion (Webhook):**
+    - Paystack sends `refund.processed` event.
+    - Backend updates Refund status to `COMPLETED`.

@@ -61,6 +61,15 @@ export class User {
 
   @Prop({ enum: BloodGroup })
   bloodGroup?: string;
+
+  @Prop()
+  bankName?: string;
+
+  @Prop()
+  accountName?: string;
+
+  @Prop()
+  accountNumber?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

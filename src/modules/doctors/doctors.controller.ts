@@ -16,6 +16,7 @@ import {
 import { DoctorsService } from './doctors.service';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
+import { AddBankDetailsDto } from './dto/add-bank-details.dto';
 import { UpdateVerificationStatusDto } from './dto/update-verification-status.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
@@ -97,6 +98,30 @@ export class DoctorsController {
   @Post('me/experiences')
   addExperience(@Req() req, @Body() dto) {
     return this.doctorsService.addExperience(req.user.userId, dto);
+  }
+
+  @Roles(Role.DOCTOR)
+  @Post('me/bank-details')
+  async addBankDetails(@Req() req, @Body() dto: AddBankDetailsDto) {
+    try {
+      const result = await this.doctorsService.addBankDetails(
+        req.user.userId,
+        dto,
+      );
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Bank details added successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to add bank details',
+        data: null,
+      };
+    }
   }
 
   // Admin endpoints
