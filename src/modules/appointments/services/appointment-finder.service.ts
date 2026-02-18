@@ -219,9 +219,7 @@ export class AppointmentFinderService {
 
     const totalReviews = ratingStats?.total || 0;
     const averageRating =
-      totalReviews > 0
-        ? parseFloat((ratingStats.average || 0).toFixed(1))
-        : 0;
+      totalReviews > 0 ? parseFloat((ratingStats.average || 0).toFixed(1)) : 0;
 
     const attachments = await this.formatAttachments(
       (appointment as any).attachments || [],

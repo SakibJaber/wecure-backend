@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Role } from 'src/common/enum/role.enum';
+import { UserStatus } from 'src/common/enum/user.status.enum';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
@@ -68,6 +69,8 @@ export class AuthService {
     const match = await bcrypt.compare(password, user.password);
     if (!match) throw new UnauthorizedException('Invalid credentials');
 
+    await this.validateDoctorStatus(user);
+
     const tokens = await this.generateToken(
       user._id.toString(),
       user.role,
@@ -78,12 +81,47 @@ export class AuthService {
       user._id.toString(),
       tokens.refreshToken,
     );
+    await this.validateDoctorStatus(user);
+
     return {
       name: user.name,
       email: user.email,
       role: user.role,
       ...tokens,
     };
+  }
+
+  private async validateDoctorStatus(user: any) {
+    if (user.status === UserStatus.BLOCKED) {
+      throw new UnauthorizedException('Account blocked');
+    }
+
+    if (user.role === Role.DOCTOR) {
+      const doctor = await this.doctorModel.findOne({
+        userId: user._id.toString(),
+      });
+      if (doctor) {
+        if (doctor.verificationStatus === 'PENDING') {
+          throw new UnauthorizedException(
+            'Your account is pending verification. Please wait for admin approval.',
+          );
+        }
+        if (doctor.verificationStatus === 'REJECTED') {
+          throw new UnauthorizedException(
+            'Your account has been rejected. Please contact support.',
+          );
+        }
+        if (doctor.verificationStatus === 'SUSPENDED') {
+          throw new UnauthorizedException(
+            'Your account has been suspended. Please contact support.',
+          );
+        }
+      } else if (user.status === UserStatus.PENDING) {
+        throw new UnauthorizedException(
+          'Your account is pending verification. Please wait for admin approval.',
+        );
+      }
+    }
   }
 
   async resendRegistrationOtp(email: string) {
@@ -146,6 +184,8 @@ export class AuthService {
       user.refreshToken,
     );
     if (!refreshTokenMatches) throw new ForbiddenException('Access Denied');
+
+    await this.validateDoctorStatus(user);
 
     const tokens = await this.generateToken(
       user._id.toString(),
@@ -273,6 +313,8 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
+
+    await this.validateDoctorStatus(user);
 
     // Generate tokens
     const tokens = await this.generateToken(

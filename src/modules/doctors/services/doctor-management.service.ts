@@ -16,6 +16,7 @@ import {
   DoctorExperience,
   DoctorExperienceDocument,
 } from '../schemas/doctor-experience.schema';
+import { Review, ReviewDocument } from '../../reviews/schemas/review.schema';
 import { UploadsService } from '../../uploads/uploads.service';
 import { AvailabilityService } from '../../availability/availability.service';
 import { AppointmentManagerService } from '../../appointments/services/appointment-manager.service';
@@ -35,6 +36,8 @@ export class DoctorManagementService {
     private doctorServiceModel: Model<DoctorServiceDocument>,
     @InjectModel(DoctorExperience.name)
     private doctorExperienceModel: Model<DoctorExperienceDocument>,
+    @InjectModel(Review.name)
+    private reviewModel: Model<ReviewDocument>,
 
     private readonly uploadsService: UploadsService,
     @Inject(forwardRef(() => AvailabilityService))
@@ -95,7 +98,11 @@ export class DoctorManagementService {
   }
 
   async getMyProfile(userId: string) {
-    const doctor = await this.doctorModel.findOne({ userId }).lean();
+    const doctor = await this.doctorModel
+      .findOne({ userId })
+      .populate('userId', 'name profileImage')
+      .populate('specialtyId', 'name')
+      .lean();
     if (!doctor) return null;
 
     if (
@@ -136,6 +143,34 @@ export class DoctorManagementService {
         ? this.encryptionService.decrypt(doctor.accountNumber)
         : doctor.accountNumber;
     }
+
+    // Add services
+    (doctor as any).services = await this.doctorServiceModel
+      .find({
+        doctorId: doctor._id,
+      })
+      .lean();
+
+    // Add average rating
+    const [ratingStats] = await this.reviewModel.aggregate([
+      {
+        $match: {
+          $or: [{ doctorId: doctor._id }, { doctorId: doctor._id.toString() }],
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          average: { $avg: '$rating' },
+        },
+      },
+    ]);
+
+    (doctor as any).averageRating =
+      (ratingStats?.total || 0) > 0
+        ? parseFloat((ratingStats.average || 0).toFixed(1))
+        : 0;
 
     return doctor;
   }
