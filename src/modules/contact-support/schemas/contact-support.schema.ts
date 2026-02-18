@@ -36,3 +36,9 @@ export class ContactSupport {
 
 export const ContactSupportSchema =
   SchemaFactory.createForClass(ContactSupport);
+
+// Performance indexes for common queries
+ContactSupportSchema.index({ userId: 1 }); // User support history
+ContactSupportSchema.index({ status: 1 }); // Admin filtering by status
+ContactSupportSchema.index({ createdAt: -1 }); // Recent tickets first
+ContactSupportSchema.index({ userId: 1, status: 1 }); // User's tickets by status

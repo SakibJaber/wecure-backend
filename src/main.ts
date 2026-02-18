@@ -6,6 +6,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { SecurityExceptionFilter } from './common/filters/security-exception.filter';
 import { AuditLogsService } from './modules/audit-logs/audit-logs.service';
 import helmet from 'helmet';
+import * as compression from 'compression';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -27,6 +28,22 @@ async function bootstrap() {
         maxAge: 31536000, // 1 year
         includeSubDomains: true,
         preload: true,
+      },
+    }),
+  );
+
+  // Response compression (gzip/deflate) for smaller payloads
+  app.use(
+    compression({
+      level: 6, // Compression level (0-9): 6 is good balance of speed and size
+      threshold: 1536, // Only compress responses larger than 1.5KB
+      filter: (req, res) => {
+        // Don't compress if explicitly disabled
+        if (req.headers['x-no-compression']) {
+          return false;
+        }
+        // Use compression for all compressible content types
+        return compression.filter(req, res);
       },
     }),
   );

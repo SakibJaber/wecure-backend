@@ -1,6 +1,7 @@
 import { Module, Logger } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { CacheModule } from '@nestjs/cache-manager';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DomainModule } from './modules/domain.module';
@@ -10,6 +11,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
 import { databaseConfig } from './config/database.config';
+import { cacheConfig } from './config/cache.config';
 import { CommonModule } from './common/common.module';
 import { awsConfig } from 'src/config/aws.config';
 import { appConfig } from './config/app.config';
@@ -20,6 +22,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { throttlerConfig } from './config/throttler.config';
 
 const logger = new Logger('Database');
+const cacheLogger = new Logger('Cache');
 
 @Module({
   imports: [
@@ -48,6 +51,29 @@ const logger = new Logger('Database');
           return connection;
         },
       }),
+    }),
+    // Cache Module with graceful degradation
+    CacheModule.registerAsync({
+      isGlobal: true,
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => {
+        try {
+          const config = cacheConfig();
+          cacheLogger.log('Cache module initialized successfully');
+          return config;
+        } catch (error) {
+          cacheLogger.warn(
+            `Cache initialization failed: ${error.message}. Application will continue without caching.`,
+          );
+          // Return minimal config as fallback
+          return {
+            ttl: 300000, // 5 minutes in ms
+            max: 10,
+            isGlobal: true,
+          };
+        }
+      },
     }),
     DomainModule,
     AuditLogsModule,

@@ -76,6 +76,13 @@ AppointmentSchema.index(
 AppointmentSchema.index({ userId: 1, appointmentDate: -1 });
 AppointmentSchema.index({ doctorId: 1, appointmentDate: -1 });
 
+// Additional performance indexes for frequently populated/queried fields
+AppointmentSchema.index({ specialistId: 1 }); // Frequently populated
+AppointmentSchema.index({ paymentId: 1 }); // Payment lookups
+AppointmentSchema.index({ payoutId: 1 }); // Payout tracking
+AppointmentSchema.index({ status: 1, appointmentDate: -1 }); // Admin queries
+AppointmentSchema.index({ isPaidOut: 1, status: 1 }); // Payout processing queries
+
 AppointmentSchema.virtual('attachments', {
   ref: 'AppointmentAttachment',
   localField: '_id',

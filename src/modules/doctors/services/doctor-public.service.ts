@@ -3,6 +3,7 @@ import {
   NotFoundException,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -19,9 +20,13 @@ import { Review, ReviewDocument } from '../../reviews/schemas/review.schema';
 import { AvailabilityService } from '../../availability/availability.service';
 import { DoctorAggregationHelper } from '../helpers/doctor-aggregation.helper';
 import { DoctorSlotsHelper } from '../helpers/doctor-slots.helper';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
+import { CACHE_TTL, generateCacheKey } from 'src/config/cache.config';
 
 @Injectable()
 export class DoctorPublicService {
+  private readonly logger = new Logger(DoctorPublicService.name);
   constructor(
     @InjectModel(Doctor.name)
     private doctorModel: Model<DoctorDocument>,
@@ -36,9 +41,30 @@ export class DoctorPublicService {
     private readonly availabilityService: AvailabilityService,
     private readonly aggregationHelper: DoctorAggregationHelper,
     private readonly slotsHelper: DoctorSlotsHelper,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async getPublicProfile(doctorId: string) {
+    // Generate cache key
+    const cacheKey = generateCacheKey('doctor_profile', { id: doctorId });
+
+    // Try to get from cache
+    try {
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      const cacheEnabled = process.env.ENABLE_CACHE === 'true';
+
+      if (!isDevelopment || cacheEnabled) {
+        const cached = await this.cacheManager.get(cacheKey);
+        if (cached) {
+          this.logger.debug(`Cache HIT: ${cacheKey}`);
+          return cached;
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`Cache read failed: ${error.message}`);
+    }
+
+    // Query database
     const doctor = await this.doctorModel
       .findOne({ _id: doctorId, isVerified: true })
       .select('-verificationDocuments')
@@ -58,7 +84,10 @@ export class DoctorPublicService {
           .lean(),
         this.reviewModel
           .find({
-            $or: [{ doctorId: doctor._id }, { doctorId: doctor._id.toString() }],
+            $or: [
+              { doctorId: doctor._id },
+              { doctorId: doctor._id.toString() },
+            ],
           })
           .populate('userId', 'name profileImage')
           .sort({ createdAt: -1 })
@@ -72,7 +101,7 @@ export class DoctorPublicService {
     (doctor as any).totalExperienceYears =
       this.calculateTotalExperience(experiences);
 
-    return {
+    const result = {
       doctor,
       services,
       experiences,
@@ -80,6 +109,24 @@ export class DoctorPublicService {
       reviews,
       availability,
     };
+
+    // Store in cache (5 minutes TTL)
+    try {
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      const cacheEnabled = process.env.ENABLE_CACHE === 'true';
+
+      if (!isDevelopment || cacheEnabled) {
+        await this.cacheManager.set(
+          cacheKey,
+          result,
+          CACHE_TTL.DOCTOR_PROFILE * 1000,
+        );
+        this.logger.debug(`Cache SET: ${cacheKey}`);
+      }
+    } catch (error) {
+      this.logger.warn(`Cache write failed: ${error.message}`);
+    }
+    return result;
   }
 
   async getPopularDoctors() {

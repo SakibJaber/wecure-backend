@@ -129,7 +129,7 @@ export class AppointmentManagerService {
       return appointment[0];
     } catch (e) {
       await session.abortTransaction();
-      if (e.code === 11000) {
+      if (typeof e === 'object' && e !== null && 'code' in e && (e as any).code === 11000) {
         throw new BadRequestException('This time slot is already booked');
       }
       throw e;

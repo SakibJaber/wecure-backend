@@ -16,7 +16,7 @@ export class AppointmentSchedulerService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(CronExpression.EVERY_10_MINUTES)
   async handleAppointmentTransitions() {
     this.logger.debug('Running appointment status transition job...');
 
@@ -177,3 +177,4 @@ export class AppointmentSchedulerService {
     });
   }
 }
+
