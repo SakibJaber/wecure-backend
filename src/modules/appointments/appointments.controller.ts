@@ -211,6 +211,18 @@ export class AppointmentsController {
 
   // Doctor
   @Roles(Role.DOCTOR)
+  @Get('doctor/dashboard')
+  async getDashboardStats(@Req() req) {
+    const data = await this.finderService.getDashboardStats(req.user.userId);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Dashboard stats fetched successfully',
+      data,
+    };
+  }
+
+  @Roles(Role.DOCTOR)
   @Get('doctor')
   async getDoctorAppointments(@Req() req, @Query() query) {
     const { data, ...meta } = await this.finderService.getForDoctor(

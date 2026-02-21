@@ -6,12 +6,14 @@ import {
   ContactSupport,
   ContactSupportSchema,
 } from './schemas/contact-support.schema';
+import { UploadsModule } from '../uploads/uploads.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: ContactSupport.name, schema: ContactSupportSchema },
     ]),
+    UploadsModule,
   ],
   controllers: [ContactSupportController],
   providers: [ContactSupportService],

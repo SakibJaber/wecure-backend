@@ -5,11 +5,14 @@ import {
   Body,
   Patch,
   Param,
-  Delete,
-  UseGuards,
   Req,
   Query,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  Delete,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ContactSupportService } from './contact-support.service';
 import { CreateContactSupportDto } from './dto/create-contact-support.dto';
 import { UpdateContactSupportDto } from './dto/update-contact-support.dto';
@@ -18,19 +21,34 @@ import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { Role } from 'src/common/enum/role.enum';
 import { isValidObjectId } from 'mongoose';
+import { PrivateUploadService } from '../uploads/private-upload.service';
 
 @Controller('contact')
 export class ContactSupportController {
-  constructor(private readonly contactSupportService: ContactSupportService) {}
+  constructor(
+    private readonly contactSupportService: ContactSupportService,
+    private readonly privateUploadService: PrivateUploadService,
+  ) {}
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.DOCTOR)
+  @Roles(Role.DOCTOR, Role.USER, Role.ADMIN)
   @Post()
+  @UseInterceptors(FileInterceptor('attachment'))
   async create(
     @Body() createContactSupportDto: CreateContactSupportDto,
     @Req() req,
+    @UploadedFile() attachment?: Express.Multer.File,
   ) {
     try {
+      if (attachment) {
+        const fileKey = await this.privateUploadService.handleUpload(
+          attachment,
+          'support',
+          req.user.userId,
+        );
+        createContactSupportDto.attachment = fileKey;
+      }
+
       const result = await this.contactSupportService.create(
         createContactSupportDto,
         req.user.userId,

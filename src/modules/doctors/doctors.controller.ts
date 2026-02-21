@@ -18,6 +18,8 @@ import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
 import { AddBankDetailsDto } from './dto/add-bank-details.dto';
 import { UpdateVerificationStatusDto } from './dto/update-verification-status.dto';
+import { AddExperienceDto } from './dto/add-experience.dto';
+import { UpdateExperienceDto } from './dto/update-experience.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -94,10 +96,97 @@ export class DoctorsController {
     );
   }
 
-  // Experience
+  @Get('me/experiences')
+  async listExperiences(@Req() req) {
+    try {
+      const doctor = await this.doctorsService.getMyProfile(req.user.userId);
+      if (!doctor) throw new Error('Doctor profile not found');
+      const data = await this.doctorsService.listExperiences(
+        doctor._id.toString(),
+      );
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Experience history fetched successfully',
+        data,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to fetch experience history',
+        data: null,
+      };
+    }
+  }
+
   @Post('me/experiences')
-  addExperience(@Req() req, @Body() dto) {
-    return this.doctorsService.addExperience(req.user.userId, dto);
+  async addExperience(@Req() req, @Body() dto: AddExperienceDto) {
+    try {
+      const result = await this.doctorsService.addExperience(
+        req.user.userId,
+        dto,
+      );
+      return {
+        success: true,
+        statusCode: 201,
+        message: 'Work experience added successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to add work experience',
+        data: null,
+      };
+    }
+  }
+
+  @Patch('me/experiences/:id')
+  async updateExperience(
+    @Req() req,
+    @Param('id') id: string,
+    @Body() dto: UpdateExperienceDto,
+  ) {
+    try {
+      const result = await this.doctorsService.updateExperience(
+        req.user.userId,
+        id,
+        dto,
+      );
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Work experience updated successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to update work experience',
+        data: null,
+      };
+    }
+  }
+
+  @Delete('me/experiences/:id')
+  async deleteExperience(@Req() req, @Param('id') id: string) {
+    try {
+      await this.doctorsService.deleteExperience(req.user.userId, id);
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Work experience deleted successfully',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to delete work experience',
+      };
+    }
   }
 
   @Roles(Role.DOCTOR)

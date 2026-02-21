@@ -14,6 +14,10 @@ import { AgoraModule } from '../agora/agora.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { RefundsModule } from '../refunds/refunds.module';
 import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
+import {
+  DoctorAvailability,
+  DoctorAvailabilitySchema,
+} from '../availability/schemas/availability.schema';
 import { AppointmentFinderService } from 'src/modules/appointments/services/appointment-finder.service';
 import { AppointmentManagerService } from 'src/modules/appointments/services/appointment-manager.service';
 import { AppointmentValidatorService } from 'src/modules/appointments/services/appointment-validator.service';
@@ -28,6 +32,7 @@ import { AppointmentValidatorService } from 'src/modules/appointments/services/a
       },
       { name: Doctor.name, schema: DoctorSchema },
       { name: Review.name, schema: ReviewSchema },
+      { name: DoctorAvailability.name, schema: DoctorAvailabilitySchema },
     ]),
     AvailabilityModule,
     DoctorsModule,

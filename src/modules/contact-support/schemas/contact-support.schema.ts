@@ -32,6 +32,9 @@ export class ContactSupport {
 
   @Prop()
   adminResponse: string;
+
+  @Prop()
+  attachment: string;
 }
 
 export const ContactSupportSchema =

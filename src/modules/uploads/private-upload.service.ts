@@ -51,7 +51,7 @@ export class PrivateUploadService {
    */
   async handleUpload(
     file: Express.Multer.File,
-    folder: 'appointments' | 'verifications' | 'profiles',
+    folder: 'appointments' | 'verifications' | 'profiles' | 'support',
     userId?: string,
   ): Promise<string> {
     if (!file) throw new BadRequestException('No file received');

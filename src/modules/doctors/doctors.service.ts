@@ -3,6 +3,8 @@ import { DoctorManagementService } from './services/doctor-management.service';
 import { DoctorAdminService } from './services/doctor-admin.service';
 import { DoctorPublicService } from './services/doctor-public.service';
 import { AddBankDetailsDto } from './dto/add-bank-details.dto';
+import { AddExperienceDto } from './dto/add-experience.dto';
+import { UpdateExperienceDto } from './dto/update-experience.dto';
 
 @Injectable()
 export class DoctorsService {
@@ -43,8 +45,20 @@ export class DoctorsService {
   }
 
   // ---------- Experiences ----------
-  async addExperience(userId: string, dto: any) {
+  async addExperience(userId: string, dto: AddExperienceDto) {
     return this.managementService.addExperience(userId, dto);
+  }
+
+  async updateExperience(
+    userId: string,
+    experienceId: string,
+    dto: UpdateExperienceDto,
+  ) {
+    return this.managementService.updateExperience(userId, experienceId, dto);
+  }
+
+  async deleteExperience(userId: string, experienceId: string) {
+    return this.managementService.deleteExperience(userId, experienceId);
   }
 
   async listExperiences(doctorId: string) {

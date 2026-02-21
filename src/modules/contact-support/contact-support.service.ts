@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { UploadsService } from '../uploads/uploads.service';
 import { CreateContactSupportDto } from './dto/create-contact-support.dto';
 import { UpdateContactSupportDto } from './dto/update-contact-support.dto';
 import {
@@ -13,17 +14,37 @@ export class ContactSupportService {
   constructor(
     @InjectModel(ContactSupport.name)
     private contactSupportModel: Model<ContactSupportDocument>,
+    private readonly uploadsService: UploadsService,
   ) {}
+
+  private async formatSupport(support: any, userId?: string) {
+    if (!support) return null;
+    const supportObj = support.toObject ? support.toObject() : support;
+
+    let attachmentUrl = '';
+    if (supportObj.attachment) {
+      attachmentUrl = await this.uploadsService.generateViewUrl(
+        supportObj.attachment,
+        userId,
+      );
+    }
+
+    return {
+      ...supportObj,
+      attachmentUrl,
+    };
+  }
 
   async create(
     createContactSupportDto: CreateContactSupportDto,
     userId: string,
-  ): Promise<ContactSupport> {
+  ): Promise<any> {
     const newMessage = new this.contactSupportModel({
       ...createContactSupportDto,
       userId: new Types.ObjectId(userId),
     });
-    return newMessage.save();
+    const saved = await newMessage.save();
+    return this.formatSupport(saved, userId);
   }
 
   async findAll(query: any): Promise<any> {
@@ -42,8 +63,12 @@ export class ContactSupportService {
       this.contactSupportModel.countDocuments(),
     ]);
 
+    const formattedData = await Promise.all(
+      data.map((item) => this.formatSupport(item)),
+    );
+
     return {
-      data,
+      data: formattedData,
       total,
       page,
       limit,
@@ -51,14 +76,16 @@ export class ContactSupportService {
     };
   }
 
-  async findByUser(userId: string): Promise<ContactSupport[]> {
-    return this.contactSupportModel
+  async findByUser(userId: string): Promise<any[]> {
+    const data = await this.contactSupportModel
       .find({ userId: new Types.ObjectId(userId) })
       .sort({ createdAt: -1 })
       .exec();
+
+    return Promise.all(data.map((item) => this.formatSupport(item, userId)));
   }
 
-  async findOne(id: string): Promise<ContactSupport> {
+  async findOne(id: string): Promise<any> {
     const message = await this.contactSupportModel
       .findById(id)
       .populate('userId', 'name email role')
@@ -70,13 +97,13 @@ export class ContactSupportService {
       );
     }
 
-    return message;
+    return this.formatSupport(message);
   }
 
   async update(
     id: string,
     updateContactSupportDto: UpdateContactSupportDto,
-  ): Promise<ContactSupport> {
+  ): Promise<any> {
     const updatedMessage = await this.contactSupportModel
       .findByIdAndUpdate(id, updateContactSupportDto, { new: true })
       .populate('userId', 'name email role')
@@ -88,7 +115,7 @@ export class ContactSupportService {
       );
     }
 
-    return updatedMessage;
+    return this.formatSupport(updatedMessage);
   }
 
   async remove(id: string): Promise<ContactSupport> {

@@ -18,6 +18,9 @@ export class Doctor {
   experienceYears: number;
 
   @Prop()
+  dateOfBirth?: string;
+
+  @Prop()
   about: string;
 
   @Prop()

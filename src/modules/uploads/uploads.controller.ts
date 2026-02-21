@@ -29,7 +29,7 @@ export class UploadsController {
     @Body()
     body: {
       mimeType: string;
-      folder: 'appointments' | 'verifications' | 'profiles';
+      folder: 'appointments' | 'verifications' | 'profiles' | 'support';
     },
   ) {
     try {

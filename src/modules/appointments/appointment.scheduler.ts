@@ -4,7 +4,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Model } from 'mongoose';
 import { AppointmentStatus } from 'src/common/enum/appointment-status.enum';
 import { Appointment, AppointmentDocument } from './schemas/appointment.schema';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsService } from 'src/modules/notifications/notifications.service';
 
 @Injectable()
 export class AppointmentSchedulerService {
@@ -16,7 +16,7 @@ export class AppointmentSchedulerService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  @Cron(CronExpression.EVERY_10_MINUTES)
+  @Cron(CronExpression.EVERY_MINUTE)
   async handleAppointmentTransitions() {
     this.logger.debug('Running appointment status transition job...');
 

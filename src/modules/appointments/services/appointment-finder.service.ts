@@ -19,6 +19,11 @@ import {
   DoctorInfoDto,
   AttachmentDto,
 } from '../dto/appointment-details.dto';
+import {
+  DoctorAvailability,
+  AvailabilityDocument,
+} from '../../availability/schemas/availability.schema';
+import { DayOfWeek } from 'src/common/enum/days.enum';
 
 @Injectable()
 export class AppointmentFinderService {
@@ -29,6 +34,8 @@ export class AppointmentFinderService {
     private doctorModel: Model<DoctorDocument>,
     @InjectModel(Review.name)
     private reviewModel: Model<ReviewDocument>,
+    @InjectModel(DoctorAvailability.name)
+    private availabilityModel: Model<AvailabilityDocument>,
     private readonly encryptionService: EncryptionService,
     private readonly uploadsService: UploadsService,
   ) {}
@@ -132,6 +139,10 @@ export class AppointmentFinderService {
 
     if (query.status) {
       filter.status = query.status;
+    } else {
+      filter.status = {
+        $in: [AppointmentStatus.UPCOMING, AppointmentStatus.ONGOING],
+      };
     }
 
     const [data, total, bookingRequestCount, acceptedCount] = await Promise.all(
@@ -179,6 +190,116 @@ export class AppointmentFinderService {
       bookingRequestCount,
       acceptedCount,
     };
+  }
+
+  async getDashboardStats(userId: string) {
+    const doctor = await this.doctorModel.findOne({ userId }).lean();
+    if (!doctor) throw new NotFoundException('Doctor profile not found');
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const dayName = now
+      .toLocaleDateString('en-US', { weekday: 'long' })
+      .toUpperCase() as DayOfWeek;
+
+    const [availability, todayAppointments, allAppointments, counts] =
+      await Promise.all([
+        this.availabilityModel
+          .findOne({
+            doctorId: doctor._id,
+            dayOfWeek: dayName,
+            isActive: true,
+          })
+          .lean(),
+        this.appointmentModel
+          .find({
+            doctorId: doctor._id,
+            appointmentDate: { $gte: today, $lt: tomorrow },
+            status: {
+              $in: [AppointmentStatus.UPCOMING, AppointmentStatus.ONGOING],
+            },
+          })
+          .sort({ appointmentTime: 1 })
+          .lean(),
+        this.appointmentModel
+          .find({
+            doctorId: doctor._id,
+            status: AppointmentStatus.UPCOMING,
+          })
+          .sort({ appointmentDate: 1, appointmentTime: 1 })
+          .limit(10)
+          .populate('userId', 'name profileImage')
+          .lean(),
+        this.getStatsCounts(doctor._id.toString()),
+      ]);
+
+    let totalSlots = 0;
+    if (availability) {
+      const start = this.timeToMinutes(availability.startTime);
+      const end = this.timeToMinutes(availability.endTime);
+      totalSlots = Math.floor((end - start) / availability.slotSizeMinutes);
+    }
+
+    const ongoingSession = todayAppointments.find(
+      (a) => a.status === AppointmentStatus.ONGOING,
+    );
+    const nextSession = todayAppointments.find(
+      (a) => a.status === AppointmentStatus.UPCOMING,
+    );
+
+    return {
+      today: {
+        date: today,
+        dayName,
+        slotCount: totalSlots,
+        startTime: availability?.startTime,
+        endTime: availability?.endTime,
+      },
+      nextSchedule: nextSession
+        ? `${nextSession.appointmentTime} - ${nextSession.appointmentEndTime}`
+        : null,
+      activeAppointment: ongoingSession
+        ? {
+            _id: ongoingSession._id,
+            patientName: (ongoingSession.userId as any)?.name,
+            patientProfileImage: (ongoingSession.userId as any)?.profileImage,
+            timeRange: `${ongoingSession.appointmentTime} - ${ongoingSession.appointmentEndTime}`,
+            reasonTitle: this.decryptValue(ongoingSession.reasonTitle),
+            status: ongoingSession.status,
+          }
+        : null,
+      stats: {
+        bookingRequestCount: counts.bookingRequestCount,
+        acceptedCount: counts.acceptedCount,
+      },
+      upcomingAppointments: allAppointments.map((a) => ({
+        _id: a._id,
+        patientName: (a.userId as any)?.name,
+        patientProfileImage: (a.userId as any)?.profileImage,
+        timeRange: `${a.appointmentTime} - ${a.appointmentEndTime}`,
+        reasonTitle: this.decryptValue(a.reasonTitle),
+        date: a.appointmentDate,
+        status: a.status,
+      })),
+    };
+  }
+
+  private async getStatsCounts(doctorId: string) {
+    const filter = { doctorId: new Types.ObjectId(doctorId) };
+    const [bookingRequestCount, acceptedCount] = await Promise.all([
+      this.appointmentModel.countDocuments({
+        ...filter,
+        status: AppointmentStatus.PENDING,
+      }),
+      this.appointmentModel.countDocuments({
+        ...filter,
+        status: AppointmentStatus.UPCOMING,
+      }),
+    ]);
+    return { bookingRequestCount, acceptedCount };
   }
 
   async getAppointmentDetails(
@@ -442,6 +563,11 @@ export class AppointmentFinderService {
   }
 
   // Helpers
+  private timeToMinutes(time: string): number {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+  }
+
   private decryptValue(value?: string): string {
     return value ? this.encryptionService.decrypt(value) || '' : '';
   }

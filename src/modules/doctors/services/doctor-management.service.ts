@@ -6,7 +6,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Doctor, DoctorDocument } from '../schemas/doctor.schema';
 import {
   DoctorService,
@@ -26,6 +26,8 @@ import { UPLOAD_FOLDERS } from 'src/common/constants/constants';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { EncryptionService } from 'src/common/services/encryption.service';
 import { AddBankDetailsDto } from '../dto/add-bank-details.dto';
+import { AddExperienceDto } from '../dto/add-experience.dto';
+import { UpdateExperienceDto } from '../dto/update-experience.dto';
 
 @Injectable()
 export class DoctorManagementService {
@@ -51,15 +53,14 @@ export class DoctorManagementService {
     private readonly notificationsService: NotificationsService,
     private readonly encryptionService: EncryptionService,
   ) {}
-
   // ---------- Doctor Profile ----------
   async createProfile(userId: string, dto: any) {
     const exists = await this.doctorModel.findOne({ userId });
     if (exists) throw new ForbiddenException('Doctor profile already exists');
 
-    const { phone, ...doctorData } = dto;
-    if (phone) {
-      await this.usersService.updateProfile(userId, { phone });
+    const { name, phone, ...doctorData } = dto;
+    if (name || phone) {
+      await this.usersService.updateProfile(userId, { name, phone });
     }
 
     return this.doctorModel.create({
@@ -72,19 +73,21 @@ export class DoctorManagementService {
     const doctor = await this.doctorModel.findOne({ userId });
     if (!doctor) throw new NotFoundException('Doctor profile not found');
 
-    const { phone, ...doctorData } = dto;
+    const { name, phone, ...doctorData } = dto;
 
     const userUpdate: any = {};
+    if (name) {
+      userUpdate.name = name;
+    }
+    if (phone) {
+      userUpdate.phone = phone;
+    }
     if (file) {
       const imageUrl = await this.publicUploadService.handleUpload(
         file,
         UPLOAD_FOLDERS.USER_PROFILES,
       );
       userUpdate.profileImage = imageUrl;
-    }
-
-    if (phone) {
-      userUpdate.phone = phone;
     }
 
     if (Object.keys(userUpdate).length > 0) {
@@ -100,10 +103,18 @@ export class DoctorManagementService {
   async getMyProfile(userId: string) {
     const doctor = await this.doctorModel
       .findOne({ userId })
-      .populate('userId', 'name profileImage')
+      .populate('userId', 'name email phone profileImage')
       .populate('specialtyId', 'name')
       .lean();
     if (!doctor) return null;
+
+    // Decrypt phone number if it exists in populated userId
+    if (doctor.userId && (doctor.userId as any).phone) {
+      const user = doctor.userId as any;
+      user.phone = this.encryptionService.isEncrypted(user.phone)
+        ? this.encryptionService.decrypt(user.phone)
+        : user.phone;
+    }
 
     if (
       doctor.verificationDocuments &&
@@ -216,30 +227,70 @@ export class DoctorManagementService {
   }
 
   // ---------- Experiences ----------
-  async addExperience(userId: string, dto: any) {
+  async addExperience(userId: string, dto: AddExperienceDto) {
     const doctor = await this.doctorModel.findOne({ userId });
-    if (!doctor) throw new NotFoundException();
+    if (!doctor) throw new NotFoundException('Doctor profile not found');
 
     const experience = await this.doctorExperienceModel.create({
       doctorId: doctor._id,
       ...dto,
     });
 
-    // Recalculate and update doctor's total experience years
-    const experiences = await this.doctorExperienceModel.find({
-      doctorId: doctor._id,
-    });
-    const totalYears = this.calculateTotalExperience(experiences);
-    await this.doctorModel.findByIdAndUpdate(doctor._id, {
-      experienceYears: totalYears,
-    });
+    await this.updateDoctorTotalExperience(doctor._id.toString());
 
     return experience;
   }
 
+  async updateExperience(
+    userId: string,
+    experienceId: string,
+    dto: UpdateExperienceDto,
+  ) {
+    const doctor = await this.doctorModel.findOne({ userId });
+    if (!doctor) throw new NotFoundException('Doctor profile not found');
+
+    const experience = await this.doctorExperienceModel.findOneAndUpdate(
+      { _id: experienceId, doctorId: doctor._id },
+      dto,
+      { new: true },
+    );
+
+    if (!experience) throw new NotFoundException('Experience not found');
+
+    await this.updateDoctorTotalExperience(doctor._id.toString());
+
+    return experience;
+  }
+
+  async deleteExperience(userId: string, experienceId: string) {
+    const doctor = await this.doctorModel.findOne({ userId });
+    if (!doctor) throw new NotFoundException('Doctor profile not found');
+
+    const result = await this.doctorExperienceModel.deleteOne({
+      _id: experienceId,
+      doctorId: doctor._id,
+    });
+
+    if (result.deletedCount === 0) {
+      throw new NotFoundException('Experience not found');
+    }
+
+    await this.updateDoctorTotalExperience(doctor._id.toString());
+
+    return { success: true };
+  }
+
+  private async updateDoctorTotalExperience(doctorId: string) {
+    const experiences = await this.doctorExperienceModel.find({ doctorId });
+    const totalYears = this.calculateTotalExperience(experiences);
+    await this.doctorModel.findByIdAndUpdate(doctorId, {
+      experienceYears: totalYears,
+    });
+  }
+
   async listExperiences(doctorId: string) {
     return this.doctorExperienceModel
-      .find({ doctorId })
+      .find({ doctorId: new Types.ObjectId(doctorId) })
       .sort({ isCurrent: -1, startDate: -1 })
       .lean();
   }
