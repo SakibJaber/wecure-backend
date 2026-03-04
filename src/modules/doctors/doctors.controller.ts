@@ -20,6 +20,7 @@ import { AddBankDetailsDto } from './dto/add-bank-details.dto';
 import { UpdateVerificationStatusDto } from './dto/update-verification-status.dto';
 import { AddExperienceDto } from './dto/add-experience.dto';
 import { UpdateExperienceDto } from './dto/update-experience.dto';
+import { SearchDoctorDto } from './dto/search-doctor.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -213,6 +214,27 @@ export class DoctorsController {
     }
   }
 
+  @Roles(Role.DOCTOR)
+  @Get('me/bank-details')
+  async getBankDetails(@Req() req) {
+    try {
+      const result = await this.doctorsService.getBankDetails(req.user.userId);
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Bank details fetched successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to fetch bank details',
+        data: null,
+      };
+    }
+  }
+
   // Admin endpoints
   @Roles(Role.ADMIN)
   @Get('admin/new-doctors')
@@ -306,14 +328,16 @@ export class DoctorsController {
 
   @Public()
   @Get('popular')
-  async getPopularDoctors() {
+  async getPopularDoctors(@Query() query: SearchDoctorDto) {
     try {
-      const doctors = await this.doctorsService.getPopularDoctors();
+      const { data, ...meta } =
+        await this.doctorsService.getPopularDoctors(query);
       return {
         success: true,
         statusCode: 200,
         message: 'Popular doctors fetched successfully',
-        data: doctors,
+        data,
+        meta,
       };
     } catch (error) {
       return {
@@ -327,15 +351,21 @@ export class DoctorsController {
 
   @Public()
   @Get('specialty/:specialtyId')
-  async getDoctorsBySpecialty(@Param('specialtyId') specialtyId: string) {
+  async getDoctorsBySpecialty(
+    @Param('specialtyId') specialtyId: string,
+    @Query() query: SearchDoctorDto,
+  ) {
     try {
-      const doctors =
-        await this.doctorsService.getDoctorsBySpecialty(specialtyId);
+      const { data, ...meta } = await this.doctorsService.getDoctorsBySpecialty(
+        specialtyId,
+        query,
+      );
       return {
         success: true,
         statusCode: 200,
         message: 'Doctors fetched successfully',
-        data: doctors,
+        data,
+        meta,
       };
     } catch (error) {
       return {
@@ -351,5 +381,26 @@ export class DoctorsController {
   @Get(':id/public')
   getPublicDoctorProfile(@Param('id') id: string) {
     return this.doctorsService.getPublicProfile(id);
+  }
+
+  @Public()
+  @Get('search')
+  async searchDoctors(@Query() query: SearchDoctorDto) {
+    try {
+      const result = await this.doctorsService.searchDoctors(query);
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Search results fetched successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to search doctors',
+        data: null,
+      };
+    }
   }
 }

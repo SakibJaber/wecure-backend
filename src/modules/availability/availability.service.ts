@@ -21,12 +21,16 @@ export class AvailabilityService {
     private readonly doctorsService: DoctorsService,
   ) {}
 
+  /** Resolves to the doctor's ObjectId or throws NotFoundException. */
+  private async resolveDoctorId(userId: string): Promise<Types.ObjectId> {
+    const doctor = await this.doctorsService.getDoctorLean(userId);
+    if (!doctor) throw new NotFoundException('Doctor profile not found');
+    return doctor._id;
+  }
+
   // ---------------- Create ----------------
   async create(userId: string, dto: CreateAvailabilityDto) {
-    const doctor = await this.doctorsService.getMyProfile(userId);
-    if (!doctor) {
-      throw new NotFoundException('Doctor profile not found');
-    }
+    const doctorId = await this.resolveDoctorId(userId);
 
     this.validateTimeRange(dto.startTime, dto.endTime, dto.slotSizeMinutes);
 
@@ -34,9 +38,9 @@ export class AvailabilityService {
     for (const day of dto.days) {
       // Use upsert to update if exists, or create new
       const result = await this.availabilityModel.findOneAndUpdate(
-        { doctorId: doctor._id, dayOfWeek: day },
+        { doctorId, dayOfWeek: day },
         {
-          doctorId: doctor._id,
+          doctorId,
           dayOfWeek: day,
           slotSizeMinutes: dto.slotSizeMinutes,
           startTime: dto.startTime,
@@ -61,11 +65,8 @@ export class AvailabilityService {
   }
 
   async getMyAvailability(userId: string) {
-    const doctor = await this.doctorsService.getMyProfile(userId);
-    if (!doctor) {
-      throw new NotFoundException('Doctor profile not found');
-    }
-    return this.getByDoctor(doctor._id);
+    const doctorId = await this.resolveDoctorId(userId);
+    return this.getByDoctor(doctorId);
   }
 
   // ---------------- Update ----------------
@@ -74,14 +75,11 @@ export class AvailabilityService {
     availabilityId: string,
     isActive: boolean,
   ) {
-    const doctor = await this.doctorsService.getMyProfile(userId);
-    if (!doctor) {
-      throw new NotFoundException('Doctor profile not found');
-    }
+    const doctorId = await this.resolveDoctorId(userId);
 
     const availability = await this.availabilityModel.findOne({
       _id: availabilityId,
-      doctorId: doctor._id,
+      doctorId,
     });
 
     if (!availability) {
@@ -101,14 +99,11 @@ export class AvailabilityService {
 
   // ---------------- Delete ----------------
   async remove(userId: string, availabilityId: string) {
-    const doctor = await this.doctorsService.getMyProfile(userId);
-    if (!doctor) {
-      throw new NotFoundException('Doctor profile not found');
-    }
+    const doctorId = await this.resolveDoctorId(userId);
 
     return this.availabilityModel.deleteOne({
       _id: availabilityId,
-      doctorId: doctor._id,
+      doctorId,
     });
   }
 

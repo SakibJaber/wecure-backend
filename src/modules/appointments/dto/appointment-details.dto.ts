@@ -11,6 +11,7 @@ export class DoctorInfoDto {
   totalReviews: number;
   experienceYears?: number;
   profileImage?: string;
+  userId: string;
 }
 
 /**

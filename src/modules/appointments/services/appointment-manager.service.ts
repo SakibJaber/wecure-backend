@@ -49,6 +49,10 @@ export class AppointmentManagerService {
     return this.agoraService.generateToken(channelName, uid);
   }
 
+  generateAgoraChatToken(userUuid: string) {
+    return this.agoraService.generateChatToken(userUuid);
+  }
+
   // ---------------- Create Appointment ----------------
   async create(userId: string, dto: CreateAppointmentDto) {
     // 1. Parallelize initial reads outside transaction
@@ -129,7 +133,12 @@ export class AppointmentManagerService {
       return appointment[0];
     } catch (e) {
       await session.abortTransaction();
-      if (typeof e === 'object' && e !== null && 'code' in e && (e as any).code === 11000) {
+      if (
+        typeof e === 'object' &&
+        e !== null &&
+        'code' in e &&
+        (e as any).code === 11000
+      ) {
         throw new BadRequestException('This time slot is already booked');
       }
       throw e;

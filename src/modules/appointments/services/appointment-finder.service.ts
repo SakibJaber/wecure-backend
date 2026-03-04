@@ -44,12 +44,45 @@ export class AppointmentFinderService {
     const page = parseInt(query.page) || 1;
     const limit = parseInt(query.limit) || 10;
     const skip = (page - 1) * limit;
+    const status = query.status;
 
     const userObjectId = new Types.ObjectId(userId);
 
+    const matchStage: any = { userId: userObjectId };
+    if (status) {
+      matchStage.status = status;
+    } else {
+      matchStage.status = { $ne: AppointmentStatus.PENDING };
+    }
+
     const pipeline: any[] = [
-      { $match: { userId: userObjectId } },
-      { $sort: { appointmentDate: -1 } },
+      { $match: matchStage },
+      {
+        $addFields: {
+          sortPriority: {
+            $switch: {
+              branches: [
+                {
+                  case: { $eq: ['$status', AppointmentStatus.ONGOING] },
+                  then: 1,
+                },
+                {
+                  case: { $eq: ['$status', AppointmentStatus.UPCOMING] },
+                  then: 2,
+                },
+              ],
+              default: 3,
+            },
+          },
+        },
+      },
+      {
+        $sort: {
+          sortPriority: 1,
+          appointmentDate: -1,
+          appointmentTime: 1,
+        },
+      },
       {
         $facet: {
           metadata: [{ $count: 'total' }],
@@ -94,6 +127,89 @@ export class AppointmentFinderService {
               $project: {
                 _id: 1,
                 doctorName: { $ifNull: ['$doctorUser.name', 'Unknown Doctor'] },
+                doctorProfileImage: '$doctorUser.profileImage',
+                specialtyName: { $ifNull: ['$specialty.name', 'General'] },
+                appointmentDate: 1,
+                appointmentTime: 1,
+                appointmentEndTime: 1,
+                status: 1,
+                consultationFee: 1,
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const [result] = await this.appointmentModel.aggregate(pipeline);
+
+    const total = result.metadata[0]?.total || 0;
+    const data = result.data;
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getForDoctorSimple(userId: string, query: any = {}): Promise<any> {
+    const page = parseInt(query.page) || 1;
+    const limit = parseInt(query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const doctor = await this.doctorModel.findOne({ userId }).lean();
+    if (!doctor) throw new NotFoundException('Doctor profile not found');
+
+    const doctorObjectId = doctor._id;
+
+    const pipeline: any[] = [
+      {
+        $match: {
+          doctorId: doctorObjectId,
+          status: { $ne: AppointmentStatus.PENDING },
+        },
+      },
+      { $sort: { appointmentDate: -1 } },
+      {
+        $facet: {
+          metadata: [{ $count: 'total' }],
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $lookup: {
+                from: 'users',
+                localField: 'userId',
+                foreignField: '_id',
+                as: 'patientUser',
+              },
+            },
+            {
+              $unwind: {
+                path: '$patientUser',
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+            {
+              $lookup: {
+                from: 'specialists',
+                localField: 'specialistId',
+                foreignField: '_id',
+                as: 'specialty',
+              },
+            },
+            {
+              $unwind: { path: '$specialty', preserveNullAndEmptyArrays: true },
+            },
+            {
+              $project: {
+                _id: 1,
+                patientName: {
+                  $ifNull: ['$patientUser.name', 'Unknown Patient'],
+                },
                 specialtyName: { $ifNull: ['$specialty.name', 'General'] },
                 appointmentDate: 1,
                 appointmentTime: 1,
@@ -145,28 +261,26 @@ export class AppointmentFinderService {
       };
     }
 
-    const [data, total, bookingRequestCount, acceptedCount] = await Promise.all(
-      [
-        this.appointmentModel
-          .find(filter)
-          .populate('userId', 'name email phone profileImage consultationFee')
-          .populate('specialistId', 'name')
-          .populate('attachments')
-          .sort({ appointmentDate: -1 })
-          .skip(skip)
-          .limit(limit)
-          .lean(),
-        this.appointmentModel.countDocuments(filter),
-        this.appointmentModel.countDocuments({
-          ...filter,
-          status: AppointmentStatus.PENDING,
-        }),
-        this.appointmentModel.countDocuments({
-          ...filter,
-          status: AppointmentStatus.UPCOMING,
-        }),
-      ],
-    );
+    const [data, total, completedCount, cancelledCount] = await Promise.all([
+      this.appointmentModel
+        .find(filter)
+        .populate('userId', 'name email phone profileImage consultationFee')
+        .populate('specialistId', 'name')
+        .populate('attachments')
+        .sort({ appointmentDate: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      this.appointmentModel.countDocuments(filter),
+      this.appointmentModel.countDocuments({
+        ...filter,
+        status: AppointmentStatus.COMPLETED,
+      }),
+      this.appointmentModel.countDocuments({
+        ...filter,
+        status: AppointmentStatus.CANCELLED,
+      }),
+    ]);
 
     const projectedData = data.map((appt: any) => ({
       _id: appt._id,
@@ -187,8 +301,8 @@ export class AppointmentFinderService {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
-      bookingRequestCount,
-      acceptedCount,
+      completedCount,
+      cancelledCount,
     };
   }
 
@@ -227,13 +341,14 @@ export class AppointmentFinderService {
         this.appointmentModel
           .find({
             doctorId: doctor._id,
+            appointmentDate: { $gte: today },
             status: AppointmentStatus.UPCOMING,
           })
           .sort({ appointmentDate: 1, appointmentTime: 1 })
           .limit(10)
           .populate('userId', 'name profileImage')
           .lean(),
-        this.getStatsCounts(doctor._id.toString()),
+        this.getStatsCounts(doctor._id.toString(), today),
       ]);
 
     let totalSlots = 0;
@@ -252,7 +367,7 @@ export class AppointmentFinderService {
 
     return {
       today: {
-        date: today,
+        date: `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`,
         dayName,
         slotCount: totalSlots,
         startTime: availability?.startTime,
@@ -260,7 +375,9 @@ export class AppointmentFinderService {
       },
       nextSchedule: nextSession
         ? `${nextSession.appointmentTime} - ${nextSession.appointmentEndTime}`
-        : null,
+        : allAppointments[0]
+          ? `${allAppointments[0].appointmentTime} - ${allAppointments[0].appointmentEndTime}`
+          : null,
       activeAppointment: ongoingSession
         ? {
             _id: ongoingSession._id,
@@ -272,8 +389,8 @@ export class AppointmentFinderService {
           }
         : null,
       stats: {
-        bookingRequestCount: counts.bookingRequestCount,
-        acceptedCount: counts.acceptedCount,
+        completedCount: counts.completedCount,
+        cancelledCount: counts.cancelledCount,
       },
       upcomingAppointments: allAppointments.map((a) => ({
         _id: a._id,
@@ -287,19 +404,21 @@ export class AppointmentFinderService {
     };
   }
 
-  private async getStatsCounts(doctorId: string) {
-    const filter = { doctorId: new Types.ObjectId(doctorId) };
-    const [bookingRequestCount, acceptedCount] = await Promise.all([
+  private async getStatsCounts(doctorId: string, today: Date) {
+    const filter = {
+      doctorId: new Types.ObjectId(doctorId),
+    };
+    const [completedCount, cancelledCount] = await Promise.all([
       this.appointmentModel.countDocuments({
         ...filter,
-        status: AppointmentStatus.PENDING,
+        status: AppointmentStatus.COMPLETED,
       }),
       this.appointmentModel.countDocuments({
         ...filter,
-        status: AppointmentStatus.UPCOMING,
+        status: AppointmentStatus.CANCELLED,
       }),
     ]);
-    return { bookingRequestCount, acceptedCount };
+    return { completedCount, cancelledCount };
   }
 
   async getAppointmentDetails(
@@ -356,6 +475,7 @@ export class AppointmentFinderService {
       totalReviews,
       experienceYears: (appointment.doctorId as any)?.experienceYears,
       profileImage: (appointment.doctorId as any)?.userId?.profileImage,
+      userId: (appointment.doctorId as any)?.userId?._id?.toString(),
     };
 
     return {
@@ -576,6 +696,7 @@ export class AppointmentFinderService {
     if (!patient) return null;
     return {
       ...patient,
+      userId: patient._id?.toString(),
       phone: this.decryptValue(patient.phone),
       dateOfBirth: this.decryptValue(patient.dateOfBirth),
       allergies: this.decryptAllergies(patient.allergies),

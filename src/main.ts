@@ -7,7 +7,7 @@ import { SecurityExceptionFilter } from './common/filters/security-exception.fil
 import { AuditLogsService } from './modules/audit-logs/audit-logs.service';
 import helmet from 'helmet';
 import * as compression from 'compression';
-
+ 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
@@ -31,7 +31,7 @@ async function bootstrap() {
       },
     }),
   );
-
+ 
   // Response compression (gzip/deflate) for smaller payloads
   app.use(
     compression({
@@ -105,3 +105,4 @@ async function bootstrap() {
   logger.log(`Application is running on: http://localhost:${port}`);
 }
 bootstrap();
+

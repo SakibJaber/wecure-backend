@@ -14,6 +14,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       secretOrKey: config.getOrThrow<string>('JWT_SECRET'),
+      ignoreExpiration: false,
     });
   }
 
@@ -36,7 +37,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     // Check if user is logged in (has a refresh token)
     if (!user.refreshToken) {
-      throw new UnauthorizedException('Session expired or logged out');
+      throw new UnauthorizedException('Session expired. Please login again.');
     }
 
     // Check user status with specific error messages

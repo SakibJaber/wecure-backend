@@ -21,6 +21,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { throttlerConfig } from './config/throttler.config';
 
+
 const logger = new Logger('Database');
 const cacheLogger = new Logger('Cache');
 

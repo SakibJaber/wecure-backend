@@ -20,9 +20,13 @@ export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
   @Post()
-  async create(@Body() createChatDto: CreateChatDto) {
+  async create(@Req() req, @Body() createChatDto: CreateChatDto) {
     try {
-      const result = await this.chatService.create(createChatDto);
+      const result = await this.chatService.create(
+        createChatDto,
+        req.user.userId,
+        req.user.role,
+      );
       return {
         success: true,
         statusCode: 201,

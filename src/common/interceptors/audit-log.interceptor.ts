@@ -34,18 +34,27 @@ export class AuditLogInterceptor implements NestInterceptor {
     delete sanitizedBody.newPassword;
 
     return next.handle().pipe(
-      tap(async () => {
+      tap(() => {
         // Only log authenticated & meaningful actions
         if (!user) return;
 
-        await this.auditLogsService.create({
-          userId: user.userId,
-          action: `${method} ${path}`,
-          resource: path,
-          resourceId: request.params?.id || undefined,
-          ipAddress: ip,
-          // We could also add sanitizedBody here if we update the AuditLog schema
-        });
+        // Fire-and-forget: do NOT await so the audit log write never blocks
+        // the HTTP response. Errors are caught to prevent unhandled rejections.
+        this.auditLogsService
+          .create({
+            userId: user.userId,
+            action: `${method} ${path}`,
+            resource: path,
+            resourceId: request.params?.id || undefined,
+            ipAddress: ip,
+          })
+          .catch((err) => {
+            // Log failure without crashing the process
+            console.error(
+              '[AuditLog] Failed to write audit log:',
+              err?.message,
+            );
+          });
       }),
     );
   }

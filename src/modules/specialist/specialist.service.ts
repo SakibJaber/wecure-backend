@@ -60,8 +60,18 @@ export class SpecialistService {
     const limit = parseInt(query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    // Generate cache key
-    const cacheKey = generateCacheKey('specialists', { page, limit });
+    // Build filter
+    const filter: any = {};
+    if (query.q) {
+      filter.name = { $regex: query.q, $options: 'i' };
+    }
+
+    // Generate cache key (include q in key so searches are cached separately)
+    const cacheKey = generateCacheKey('specialists', {
+      page,
+      limit,
+      q: query.q || '',
+    });
 
     // Try to get from cache
     try {
@@ -82,8 +92,8 @@ export class SpecialistService {
 
     // Query database
     const [data, total] = await Promise.all([
-      this.specialistModel.find().skip(skip).limit(limit).exec(),
-      this.specialistModel.countDocuments(),
+      this.specialistModel.find(filter).skip(skip).limit(limit).exec(),
+      this.specialistModel.countDocuments(filter),
     ]);
 
     const result = {

@@ -214,19 +214,19 @@ export class DoctorAggregationHelper {
       {
         $lookup: {
           from: 'specialists',
-          let: { specialtyId: '$specialtyId' },
+          let: {
+            sId1: '$specialtyId',
+            sId2: '$specialistId', // Fallback for data inconsistency
+          },
           pipeline: [
             {
               $match: {
                 $expr: {
                   $or: [
-                    { $eq: ['$_id', '$$specialtyId'] },
-                    {
-                      $eq: [
-                        { $toString: '$_id' },
-                        { $toString: '$$specialtyId' },
-                      ],
-                    },
+                    { $eq: ['$_id', '$$sId1'] },
+                    { $eq: ['$_id', '$$sId2'] },
+                    { $eq: [{ $toString: '$_id' }, { $toString: '$$sId1' }] },
+                    { $eq: [{ $toString: '$_id' }, { $toString: '$$sId2' }] },
                   ],
                 },
               },
@@ -278,31 +278,36 @@ export class DoctorAggregationHelper {
 
   /**
    * Project fields for doctor card view
-   * @param includeAvailabilities - Whether to include availability data
+   * @param includeAvailabilities - Whether to include raw availability data array
+   * @param includeMinFee - Whether to include the minFee field (defaults to true if includeAvailabilities is true)
    */
-  projectDoctorCard(includeAvailabilities = false): PipelineStage {
-    const baseProjection = {
+  projectDoctorCard(
+    includeAvailabilities = false,
+    includeMinFee = true,
+  ): PipelineStage {
+    const baseProjection: any = {
       _id: 1,
       name: '$user.name',
       profileImage: { $ifNull: ['$user.profileImage', null] },
-      specialty: '$specialty.name',
+      specialty: { $ifNull: ['$specialty.name', null] },
       currentOrganization: 1,
       experienceYears: 1,
       totalExperienceYears: {
-        $ifNull: ['$experienceYears', '$calculatedExperienceYears', 0],
+        $max: [
+          { $ifNull: ['$experienceYears', 0] },
+          { $ifNull: ['$calculatedExperienceYears', 0] },
+        ],
       },
       averageRating: { $round: ['$averageRating', 1] },
       totalReviews: 1,
     };
 
+    if (includeMinFee || includeAvailabilities) {
+      baseProjection.minFee = 1;
+    }
+
     if (includeAvailabilities) {
-      return {
-        $project: {
-          ...baseProjection,
-          minFee: 1,
-          availabilities: 1,
-        },
-      };
+      baseProjection.availabilities = 1;
     }
 
     return {

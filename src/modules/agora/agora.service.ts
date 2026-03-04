@@ -1,6 +1,6 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { RtcTokenBuilder, RtcRole } from 'agora-token';
+import { RtcTokenBuilder, RtcRole, ChatTokenBuilder } from 'agora-token';
 
 @Injectable()
 export class AgoraService {
@@ -25,7 +25,6 @@ export class AgoraService {
     const role = RtcRole.PUBLISHER;
     const expirationTimeInSeconds = 300; // 5 minutes
     const currentTimestamp = Math.floor(Date.now() / 1000);
-    const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
 
     try {
       let token: string;
@@ -59,6 +58,35 @@ export class AgoraService {
     } catch (error) {
       console.error('Agora token generation error:', error);
       throw new InternalServerErrorException('Failed to generate Agora token');
+    }
+  }
+
+  generateChatToken(userUuid: string) {
+    if (!this.appId || !this.appCertificate) {
+      throw new InternalServerErrorException('Agora configuration missing');
+    }
+
+    const expirationInSeconds = 3600; // 1 hour for chat
+
+    try {
+      const token = ChatTokenBuilder.buildUserToken(
+        this.appId,
+        this.appCertificate,
+        userUuid,
+        expirationInSeconds,
+      );
+
+      return {
+        appId: this.appId,
+        token,
+        userId: userUuid,
+        expirationInSeconds,
+      };
+    } catch (error) {
+      console.error('Agora chat token generation error:', error);
+      throw new InternalServerErrorException(
+        'Failed to generate Agora chat token',
+      );
     }
   }
 }

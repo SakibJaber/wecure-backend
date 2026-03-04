@@ -116,23 +116,48 @@ export class DoctorManagementService {
         : user.phone;
     }
 
-    if (
-      doctor.verificationDocuments &&
-      doctor.verificationDocuments.length > 0
-    ) {
-      doctor.verificationDocuments = await Promise.all(
-        doctor.verificationDocuments.map((key) =>
-          this.uploadsService.generateViewUrl(key, userId),
-        ),
-      );
-    }
+    // Run all dependent queries in parallel instead of sequentially
+    const [experiences, services, ratingAgg, verificationUrls] =
+      await Promise.all([
+        this.doctorExperienceModel.find({ doctorId: doctor._id }).lean(),
+        this.doctorServiceModel.find({ doctorId: doctor._id }).lean(),
+        this.reviewModel.aggregate([
+          {
+            $match: {
+              $or: [
+                { doctorId: doctor._id },
+                { doctorId: doctor._id.toString() },
+              ],
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: 1 },
+              average: { $avg: '$rating' },
+            },
+          },
+        ]),
+        doctor.verificationDocuments?.length > 0
+          ? Promise.all(
+              doctor.verificationDocuments.map((key) =>
+                this.uploadsService.generateViewUrl(key, userId),
+              ),
+            )
+          : Promise.resolve(doctor.verificationDocuments),
+      ]);
 
-    // Add total experience years
-    const experiences = await this.doctorExperienceModel.find({
-      doctorId: doctor._id,
-    });
+    // Apply results
+    doctor.verificationDocuments = verificationUrls;
     (doctor as any).totalExperienceYears =
       this.calculateTotalExperience(experiences);
+    (doctor as any).services = services;
+
+    const [ratingStats] = ratingAgg;
+    (doctor as any).averageRating =
+      (ratingStats?.total || 0) > 0
+        ? parseFloat((ratingStats.average || 0).toFixed(1))
+        : 0;
 
     // Decrypt bank details if they exist
     if (doctor.bankName) {
@@ -155,35 +180,19 @@ export class DoctorManagementService {
         : doctor.accountNumber;
     }
 
-    // Add services
-    (doctor as any).services = await this.doctorServiceModel
-      .find({
-        doctorId: doctor._id,
-      })
-      .lean();
-
-    // Add average rating
-    const [ratingStats] = await this.reviewModel.aggregate([
-      {
-        $match: {
-          $or: [{ doctorId: doctor._id }, { doctorId: doctor._id.toString() }],
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          average: { $avg: '$rating' },
-        },
-      },
-    ]);
-
-    (doctor as any).averageRating =
-      (ratingStats?.total || 0) > 0
-        ? parseFloat((ratingStats.average || 0).toFixed(1))
-        : 0;
-
     return doctor;
+  }
+
+  /**
+   * Lightweight helper — returns ONLY _id for the given userId.
+   * Use this instead of getMyProfile() when only the doctor's _id is needed,
+   * to avoid triggering the full 4-query profile chain.
+   */
+  async getDoctorLean(userId: string): Promise<{ _id: Types.ObjectId } | null> {
+    return this.doctorModel
+      .findOne({ userId })
+      .select('_id')
+      .lean<{ _id: Types.ObjectId }>();
   }
 
   async addBankDetails(userId: string, dto: AddBankDetailsDto) {
@@ -199,6 +208,32 @@ export class DoctorManagementService {
     return this.doctorModel.findByIdAndUpdate(doctor._id, updateData, {
       new: true,
     });
+  }
+
+  async getBankDetails(userId: string) {
+    const doctor = await this.doctorModel
+      .findOne({ userId })
+      .select('bankName accountName accountNumber')
+      .lean();
+    if (!doctor) throw new NotFoundException('Doctor profile not found');
+
+    return {
+      bankName: doctor.bankName
+        ? this.encryptionService.isEncrypted(doctor.bankName)
+          ? this.encryptionService.decrypt(doctor.bankName)
+          : doctor.bankName
+        : null,
+      accountName: doctor.accountName
+        ? this.encryptionService.isEncrypted(doctor.accountName)
+          ? this.encryptionService.decrypt(doctor.accountName)
+          : doctor.accountName
+        : null,
+      accountNumber: doctor.accountNumber
+        ? this.encryptionService.isEncrypted(doctor.accountNumber)
+          ? this.encryptionService.decrypt(doctor.accountNumber)
+          : doctor.accountNumber
+        : null,
+    };
   }
 
   // ---------- Services ----------

@@ -49,7 +49,11 @@ export class SeederService implements OnModuleInit {
       });
       this.logger.log('Super Admin seeded successfully');
     } catch (error) {
-      this.logger.error(`Failed to seed Super Admin: ${error.message}`);
+      if (error instanceof Error) {
+        this.logger.error(`Failed to seed Super Admin: ${error.message}`);
+      } else {
+        this.logger.error('Failed to seed Super Admin: Unknown error', error);
+      }
     }
   }
 }

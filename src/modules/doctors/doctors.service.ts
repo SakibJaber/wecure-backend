@@ -5,6 +5,7 @@ import { DoctorPublicService } from './services/doctor-public.service';
 import { AddBankDetailsDto } from './dto/add-bank-details.dto';
 import { AddExperienceDto } from './dto/add-experience.dto';
 import { UpdateExperienceDto } from './dto/update-experience.dto';
+import { SearchDoctorDto } from './dto/search-doctor.dto';
 
 @Injectable()
 export class DoctorsService {
@@ -29,6 +30,18 @@ export class DoctorsService {
 
   async addBankDetails(userId: string, dto: AddBankDetailsDto) {
     return this.managementService.addBankDetails(userId, dto);
+  }
+
+  async getBankDetails(userId: string) {
+    return this.managementService.getBankDetails(userId);
+  }
+
+  /**
+   * Lightweight lookup — returns only _id for the given userId.
+   * Prefer this over getMyProfile() when only the doctor's _id is needed.
+   */
+  async getDoctorLean(userId: string) {
+    return this.managementService.getDoctorLean(userId);
   }
 
   // ---------- Services ----------
@@ -100,11 +113,15 @@ export class DoctorsService {
     return this.managementService.calculateTotalExperience(experiences);
   }
 
-  async getPopularDoctors() {
-    return this.publicService.getPopularDoctors();
+  async getPopularDoctors(query: SearchDoctorDto) {
+    return this.publicService.getPopularDoctors(query);
   }
 
-  async getDoctorsBySpecialty(specialtyId: string) {
-    return this.publicService.getDoctorsBySpecialty(specialtyId);
+  async getDoctorsBySpecialty(specialtyId: string, query: SearchDoctorDto) {
+    return this.publicService.getDoctorsBySpecialty(query, specialtyId);
+  }
+
+  async searchDoctors(query: SearchDoctorDto) {
+    return this.publicService.searchDoctors(query);
   }
 }

@@ -6,7 +6,9 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, PipelineStage, Types } from 'mongoose';
+import { SearchDoctorDto } from '../dto/search-doctor.dto';
+
 import { Doctor, DoctorDocument } from '../schemas/doctor.schema';
 import {
   DoctorService,
@@ -97,9 +99,11 @@ export class DoctorPublicService {
         this.availabilityService.getByDoctor(doctor._id as Types.ObjectId),
       ]);
 
-    // Calculate total experience years
-    (doctor as any).totalExperienceYears =
-      this.calculateTotalExperience(experiences);
+    const calculatedYears = this.calculateTotalExperience(experiences);
+    (doctor as any).totalExperienceYears = Math.max(
+      (doctor as any).experienceYears || 0,
+      calculatedYears,
+    );
 
     const result = {
       doctor,
@@ -129,8 +133,12 @@ export class DoctorPublicService {
     return result;
   }
 
-  async getPopularDoctors() {
-    const popularDoctors = await this.doctorModel.aggregate([
+  async getPopularDoctors(query: SearchDoctorDto) {
+    const page = parseInt(query.page as string) || 1;
+    const limit = parseInt(query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+
+    const pipeline: PipelineStage[] = [
       // Match verified doctors only
       {
         $match: {
@@ -153,16 +161,45 @@ export class DoctorPublicService {
       // Lookup user and specialty details
       ...this.aggregationHelper.lookupUserDetails(),
       ...this.aggregationHelper.lookupSpecialtyDetails(),
-      // Project and sort
-      this.aggregationHelper.projectDoctorCard(false),
-      this.aggregationHelper.sortByRating(),
+    ];
+
+    // Sorting (Default to Rating)
+    pipeline.push(this.aggregationHelper.sortByRating());
+
+    // Count total (before pagination)
+    const countPipeline: PipelineStage[] = [...pipeline, { $count: 'total' }];
+
+    // Project and sort
+    pipeline.push(
+      this.aggregationHelper.projectDoctorCard(false) as PipelineStage,
+    );
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: limit });
+
+    const [data, countResult] = await Promise.all([
+      this.doctorModel.aggregate(pipeline),
+      this.doctorModel.aggregate(countPipeline),
     ]);
 
-    return popularDoctors;
+    const total = countResult[0]?.total ?? 0;
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
-  async getDoctorsBySpecialty(specialtyId: string) {
-    const doctors = await this.doctorModel.aggregate([
+  async getDoctorsBySpecialty(query: SearchDoctorDto, specialtyId?: string) {
+    const page = parseInt(query.page as string) || 1;
+    const limit = parseInt(query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+
+    const targetSpecialtyId = specialtyId || (query as any).specialtyId;
+
+    const pipeline: PipelineStage[] = [
       // Match verified doctors with the given specialty
       {
         $match: {
@@ -170,8 +207,8 @@ export class DoctorPublicService {
           verificationStatus: 'VERIFIED',
           $expr: {
             $or: [
-              { $eq: ['$specialtyId', new Types.ObjectId(specialtyId)] },
-              { $eq: [{ $toString: '$specialtyId' }, specialtyId] },
+              { $eq: ['$specialtyId', new Types.ObjectId(targetSpecialtyId)] },
+              { $eq: [{ $toString: '$specialtyId' }, targetSpecialtyId] },
             ],
           },
         },
@@ -182,41 +219,112 @@ export class DoctorPublicService {
       this.aggregationHelper.calculateRatings(),
       this.aggregationHelper.lookupExperiences(),
       this.aggregationHelper.calculateExperience(),
-      // Lookup availabilities and user/specialty details
+      // Lookup availabilities and user details
       ...this.aggregationHelper.lookupAvailabilities(),
       ...this.aggregationHelper.lookupUserDetails(),
-      {
-        $lookup: {
-          from: 'specialists',
-          localField: 'specialtyId',
-          foreignField: '_id',
-          as: 'specialty',
-        },
-      },
-      {
-        $unwind: {
-          path: '$specialty',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      // Project and sort
-      this.aggregationHelper.projectDoctorCard(true),
-      this.aggregationHelper.sortByRating(),
+      ...this.aggregationHelper.lookupSpecialtyDetails(),
+    ];
+
+    // Sorting (Default to Rating)
+    pipeline.push(this.aggregationHelper.sortByRating());
+
+    // Count total (before pagination)
+    const countPipeline: PipelineStage[] = [...pipeline, { $count: 'total' }];
+
+    // Project (exclude raw availabilities) + paginate
+    pipeline.push(
+      this.aggregationHelper.projectDoctorCard(false) as PipelineStage,
+    );
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: limit });
+
+    const [data, countResult] = await Promise.all([
+      this.doctorModel.aggregate(pipeline),
+      this.doctorModel.aggregate(countPipeline),
     ]);
 
-    // Use slots helper to add next available slots
-    return doctors.map((doctor) => {
-      const nextAvailableSlots = this.slotsHelper.generateNextAvailableSlots(
-        doctor,
-        this.availabilityService,
-      );
+    const total = countResult[0]?.total ?? 0;
 
-      return {
-        ...doctor,
-        nextAvailableSlots,
-        availabilities: undefined, // Remove raw availability data
-      };
-    });
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async searchDoctors(query: SearchDoctorDto) {
+    const page = parseInt(query.page as string) || 1;
+    const limit = parseInt(query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+
+    // ── Base match: verified doctors only ──────────────────────────────
+    const baseMatch: any = {
+      isVerified: true,
+      verificationStatus: 'VERIFIED',
+    };
+
+    // ── Build aggregation pipeline ─────────────────────────────────────
+    const pipeline: PipelineStage[] = [
+      { $match: baseMatch },
+
+      // Enrich with reviews, ratings, experiences
+      this.aggregationHelper.addDoctorIdStringField(),
+      this.aggregationHelper.lookupReviews(),
+      this.aggregationHelper.calculateRatings(),
+      this.aggregationHelper.lookupExperiences(),
+      this.aggregationHelper.calculateExperience(),
+
+      // Availability (for fee)
+      ...this.aggregationHelper.lookupAvailabilities(),
+
+      // User + specialty details
+      ...this.aggregationHelper.lookupUserDetails(),
+      ...this.aggregationHelper.lookupSpecialtyDetails(),
+    ];
+
+    // ── Post-join filters ──────────────────────────────────────────────
+    const postMatch: any = {};
+
+    if (query.q) {
+      const regex = { $regex: query.q, $options: 'i' };
+      postMatch.$or = [{ 'user.name': regex }, { 'specialty.name': regex }];
+    }
+
+    if (Object.keys(postMatch).length > 0) {
+      pipeline.push({ $match: postMatch });
+    }
+
+    // ── Sorting (Default to Rating) ────────────────────────────────────
+    pipeline.push(this.aggregationHelper.sortByRating());
+
+    // ── Count total (before pagination) ───────────────────────────────
+    const countPipeline: PipelineStage[] = [...pipeline, { $count: 'total' }];
+
+    // ── Project + paginate ─────────────────────────────────────────────
+    pipeline.push(
+      this.aggregationHelper.projectDoctorCard(false) as PipelineStage,
+    );
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: limit });
+
+    const [data, countResult] = await Promise.all([
+      this.doctorModel.aggregate(pipeline),
+      this.doctorModel.aggregate(countPipeline),
+    ]);
+
+    const total = countResult[0]?.total ?? 0;
+
+    return {
+      doctors: {
+        data,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   private calculateTotalExperience(experiences: any[]): number {

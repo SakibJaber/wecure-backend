@@ -8,10 +8,12 @@ import { Doctor } from '../../doctors/schemas/doctor.schema';
 import { Review } from '../../reviews/schemas/review.schema';
 import { EncryptionService } from 'src/common/services/encryption.service';
 import { UploadsService } from '../../uploads/uploads.service';
+import { DoctorAvailability } from '../../availability/schemas/availability.schema';
 
 describe('AppointmentFinderService', () => {
   let service: AppointmentFinderService;
   let appointmentModel: any;
+  let reviewModel: any;
   let encryptionService: EncryptionService;
 
   const mockUserId = new Types.ObjectId().toString();
@@ -39,14 +41,19 @@ describe('AppointmentFinderService', () => {
         {
           provide: getModelToken(Review.name),
           useValue: {
-            find: jest.fn(),
+            aggregate: jest.fn(),
+          },
+        },
+        {
+          provide: getModelToken(DoctorAvailability.name),
+          useValue: {
+            findOne: jest.fn(),
           },
         },
         {
           provide: EncryptionService,
           useValue: {
             decrypt: jest.fn((val) => val),
-            encrypt: jest.fn((val) => val),
           },
         },
         {
@@ -60,6 +67,7 @@ describe('AppointmentFinderService', () => {
 
     service = module.get<AppointmentFinderService>(AppointmentFinderService);
     appointmentModel = module.get(getModelToken(Appointment.name));
+    reviewModel = module.get(getModelToken(Review.name));
     encryptionService = module.get<EncryptionService>(EncryptionService);
   });
 
@@ -77,13 +85,18 @@ describe('AppointmentFinderService', () => {
 
     it('should return enriched appointment details', async () => {
       const mockAppt = {
-        _id: mockAppointmentId,
-        userId: mockUserId,
-        doctorId: { _id: 'doc1', userId: { name: 'Dr. Smith' } },
+        _id: new Types.ObjectId(mockAppointmentId),
+        userId: new Types.ObjectId(mockUserId),
+        doctorId: { _id: new Types.ObjectId(), userId: { name: 'Dr. Smith' } },
         specialistId: { name: 'Cardiology' },
         reasonTitle: 'Encrypted Title',
         reasonDetails: 'Encrypted Details',
         attachments: [],
+        appointmentDate: new Date(),
+        appointmentTime: '09:00',
+        appointmentEndTime: '09:30',
+        status: 'UPCOMING',
+        consultationFee: 100,
       };
 
       appointmentModel.findOne.mockReturnValue({
@@ -91,12 +104,7 @@ describe('AppointmentFinderService', () => {
         lean: jest.fn().mockResolvedValue(mockAppt),
       });
 
-      // Mock reviews for rating
-      const reviewsModel = (service as any).reviewModel;
-      reviewsModel.find.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        lean: jest.fn().mockResolvedValue([{ rating: 5 }, { rating: 4 }]),
-      });
+      reviewModel.aggregate.mockResolvedValue([{ total: 2, average: 4.5 }]);
 
       const result = await service.getAppointmentDetails(
         mockAppointmentId,
@@ -110,7 +118,7 @@ describe('AppointmentFinderService', () => {
   });
 
   describe('getForUser', () => {
-    it('should call aggregate with correct pipeline', async () => {
+    it('should call aggregate with default prioritized sorting', async () => {
       appointmentModel.aggregate.mockResolvedValue([
         {
           metadata: [{ total: 1 }],
@@ -120,9 +128,49 @@ describe('AppointmentFinderService', () => {
 
       const result = await service.getForUser(mockUserId);
 
-      expect(appointmentModel.aggregate).toHaveBeenCalled();
+      expect(appointmentModel.aggregate).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            $match: {
+              userId: new Types.ObjectId(mockUserId),
+              status: { $ne: 'PENDING' },
+            },
+          }),
+          expect.objectContaining({
+            $addFields: expect.objectContaining({
+              sortPriority: expect.any(Object),
+            }),
+          }),
+          expect.objectContaining({
+            $sort: { sortPriority: 1, appointmentDate: -1, appointmentTime: 1 },
+          }),
+        ]),
+      );
       expect(result.data).toHaveLength(1);
-      expect(result.total).toBe(1);
+    });
+
+    it('should filter by specific status if provided', async () => {
+      appointmentModel.aggregate.mockResolvedValue([
+        {
+          metadata: [{ total: 1 }],
+          data: [{ _id: 'appt2' }],
+        },
+      ]);
+
+      const result = await service.getForUser(mockUserId, {
+        status: 'UPCOMING',
+      });
+
+      expect(appointmentModel.aggregate).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            $match: {
+              userId: new Types.ObjectId(mockUserId),
+              status: 'UPCOMING',
+            },
+          }),
+        ]),
+      );
     });
   });
 });

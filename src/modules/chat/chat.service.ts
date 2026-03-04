@@ -18,12 +18,19 @@ export class ChatService {
     private readonly encryptionService: EncryptionService,
   ) {}
 
-  async create(createChatDto: CreateChatDto) {
+  async create(
+    createChatDto: CreateChatDto,
+    senderId: string,
+    senderRole: string,
+  ) {
     const encryptedMessage = this.encryptionService.encrypt(
       createChatDto.message,
     );
     const chat = new this.chatModel({
       ...createChatDto,
+      appointmentId: new Types.ObjectId(createChatDto.appointmentId),
+      senderId: new Types.ObjectId(senderId),
+      senderRole,
       message: encryptedMessage,
     });
     return chat.save();

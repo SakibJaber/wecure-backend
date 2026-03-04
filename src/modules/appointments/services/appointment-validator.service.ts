@@ -144,12 +144,13 @@ export class AppointmentValidatorService {
         },
         status: { $ne: AppointmentStatus.CANCELLED },
       })
-      .select('appointmentTime')
+      .select('appointmentTime appointmentEndTime')
       .lean();
 
-    const bookedTimes = new Set(
-      existingAppointments.map((a) => a.appointmentTime),
-    );
+    const bookedAppointments = existingAppointments.map((a) => ({
+      start: this.timeToMinutes(a.appointmentTime),
+      end: this.timeToMinutes(a.appointmentEndTime || a.appointmentTime),
+    }));
 
     // 4. Filter out booked slots and past slots (if today)
     const now = new Date();
@@ -162,17 +163,25 @@ export class AppointmentValidatorService {
 
     return allSlots
       .filter((time) => {
+        const slotStart = this.timeToMinutes(time);
+        const slotEnd = slotStart + dayAvailability.slotSizeMinutes;
+
         if (isToday) {
-          const slotMinutes = this.timeToMinutes(time);
-          if (slotMinutes <= currentMinutes) {
+          if (slotStart <= currentMinutes) {
             return false;
           }
         }
-        return true;
+
+        // Check for overlap: S1 < E2 && E1 > S2
+        const isOverlapping = bookedAppointments.some(
+          (appt) => slotStart < appt.end && slotEnd > appt.start,
+        );
+
+        return !isOverlapping;
       })
       .map((time) => ({
         time,
-        isAvailable: !bookedTimes.has(time),
+        isAvailable: true,
         fee: dayAvailability.fee,
         duration: dayAvailability.slotSizeMinutes,
       }));
@@ -213,17 +222,22 @@ export class AppointmentValidatorService {
         },
         status: { $ne: AppointmentStatus.CANCELLED },
       })
-      .select('appointmentDate appointmentTime')
+      .select('appointmentDate appointmentTime appointmentEndTime')
       .lean();
 
-    // Map: 'YYYY-MM-DD' -> Set<time>
-    const bookedMap = new Map<string, Set<string>>();
+    // Map: 'YYYY-MM-DD' -> [{start, end}]
+    const bookedMap = new Map<string, { start: number; end: number }[]>();
     appointments.forEach((appt) => {
       const dateStr = this.formatDate(appt.appointmentDate);
       if (!bookedMap.has(dateStr)) {
-        bookedMap.set(dateStr, new Set());
+        bookedMap.set(dateStr, []);
       }
-      bookedMap.get(dateStr)!.add(appt.appointmentTime);
+      bookedMap.get(dateStr)!.push({
+        start: this.timeToMinutes(appt.appointmentTime),
+        end: this.timeToMinutes(
+          appt.appointmentEndTime || appt.appointmentTime,
+        ),
+      });
     });
 
     const results: any[] = [];
@@ -253,8 +267,35 @@ export class AppointmentValidatorService {
           dayAvailability.slotSizeMinutes,
         );
 
-        const bookedSlots = bookedMap.get(dateStr) || new Set();
-        const availableCount = allSlots.length - bookedSlots.size;
+        const bookedAppts = bookedMap.get(dateStr) || [];
+
+        // If today, filter out past slots from total available slots calculation
+        const isToday =
+          currentDate.getDate() === now.getDate() &&
+          currentDate.getMonth() === now.getMonth() &&
+          currentDate.getFullYear() === now.getFullYear();
+
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+        const availableSlots = allSlots.filter((time) => {
+          const slotStart = this.timeToMinutes(time);
+          const slotEnd = slotStart + dayAvailability.slotSizeMinutes;
+
+          if (isToday) {
+            if (slotStart <= currentMinutes) {
+              return false;
+            }
+          }
+
+          // Check for overlap: S1 < E2 && E1 > S2
+          const isOverlapping = bookedAppts.some(
+            (appt) => slotStart < appt.end && slotEnd > appt.start,
+          );
+
+          return !isOverlapping;
+        });
+
+        const availableCount = availableSlots.length;
 
         if (availableCount > 0) {
           results.push({

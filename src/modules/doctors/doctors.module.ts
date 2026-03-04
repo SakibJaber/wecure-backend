@@ -16,6 +16,7 @@ import { AvailabilityModule } from '../availability/availability.module';
 import { AppointmentsModule } from '../appointments/appointments.module';
 import { MailModule } from '../mail/mail.module';
 import { UsersModule } from '../users/users.module';
+import { SpecialistModule } from '../specialist/specialist.module';
 import { DoctorAggregationHelper } from './helpers/doctor-aggregation.helper';
 import { DoctorRatingHelper } from './helpers/doctor-rating.helper';
 import { DoctorSlotsHelper } from './helpers/doctor-slots.helper';
@@ -35,6 +36,7 @@ import { DoctorPublicService } from './services/doctor-public.service';
     forwardRef(() => AppointmentsModule),
     MailModule,
     UsersModule,
+    SpecialistModule,
   ],
   controllers: [DoctorsController],
   providers: [

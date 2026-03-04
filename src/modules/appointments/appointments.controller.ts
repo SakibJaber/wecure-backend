@@ -10,6 +10,7 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  UploadedFiles,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -20,7 +21,7 @@ import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
 import { AddAppointmentAttachmentDto } from './dto/add-appointment-attachment.dto';
 import { RejectAppointmentDto } from './dto/reject-appointment.dto';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { PrivateUploadService } from '../uploads/private-upload.service';
 import { AppointmentStatus } from 'src/common/enum/appointment-status.enum';
 import { AppointmentManagerService } from './services/appointment-manager.service';
@@ -40,29 +41,13 @@ export class AppointmentsController {
   // Patient
   @Roles(Role.USER)
   @Post()
-  @UseInterceptors(FileInterceptor('attachment'))
+  @UseInterceptors(FilesInterceptor('attachment'))
   async create(
     @Req() req,
     @Body() dto: CreateAppointmentDto,
-    @UploadedFile() attachment?: Express.Multer.File,
+    @UploadedFiles() attachments?: Express.Multer.File[],
   ) {
-    if (attachment) {
-      const fileKey = await this.privateUploadService.handleUpload(
-        attachment,
-        'appointments',
-        req.user.userId,
-      );
-
-      // Create attachment record
-      const attachmentInfo = await this.managerService.createAttachmentInfo(
-        req.user.userId,
-        {
-          fileKey,
-          fileType: attachment.mimetype,
-        },
-      );
-
-      // Add to dto
+    if (attachments?.length) {
       if (!dto.attachmentIds) {
         dto.attachmentIds = [];
       }
@@ -70,7 +55,25 @@ export class AppointmentsController {
       if (typeof dto.attachmentIds === 'string') {
         dto.attachmentIds = [dto.attachmentIds];
       }
-      dto.attachmentIds.push(attachmentInfo._id.toString());
+
+      for (const attachment of attachments) {
+        const fileKey = await this.privateUploadService.handleUpload(
+          attachment,
+          'appointments',
+          req.user.userId,
+        );
+
+        // Create attachment record
+        const attachmentInfo = await this.managerService.createAttachmentInfo(
+          req.user.userId,
+          {
+            fileKey,
+            fileType: attachment.mimetype,
+          },
+        );
+
+        dto.attachmentIds.push(attachmentInfo._id.toString());
+      }
     }
 
     const data = await this.managerService.create(req.user.userId, dto);
@@ -223,6 +226,22 @@ export class AppointmentsController {
   }
 
   @Roles(Role.DOCTOR)
+  @Get('doctor/me')
+  async getDoctorAppointmentsSimple(@Req() req, @Query() query) {
+    const { data, ...meta } = await this.finderService.getForDoctorSimple(
+      req.user.userId,
+      query,
+    );
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Doctor appointments fetched successfully',
+      data,
+      meta,
+    };
+  }
+
+  @Roles(Role.DOCTOR)
   @Get('doctor')
   async getDoctorAppointments(@Req() req, @Query() query) {
     const { data, ...meta } = await this.finderService.getForDoctor(
@@ -305,19 +324,19 @@ export class AppointmentsController {
   // Attachments
   @Post('attachments')
   @Roles(Role.USER, Role.DOCTOR)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('attachment'))
   async createAttachmentInfo(
     @Req() req,
     @Body() dto: AddAppointmentAttachmentDto,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFile() attachment?: Express.Multer.File,
   ) {
-    if (file) {
+    if (attachment) {
       const fileKey = await this.privateUploadService.handleUpload(
-        file,
+        attachment,
         'appointments',
       );
       dto.fileKey = fileKey;
-      dto.fileType = file.mimetype;
+      dto.fileType = attachment.mimetype;
     }
     const data = await this.managerService.createAttachmentInfo(
       req.user.userId,
@@ -332,24 +351,24 @@ export class AppointmentsController {
   }
 
   @Post(':id/attachments')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('attachment'))
   async addAttachment(
     @Req() req,
     @Param('id') id: string,
     @Body() dto: AddAppointmentAttachmentDto,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFile() attachment?: Express.Multer.File,
   ) {
     const requesterId =
       req.user.role === Role.DOCTOR ? req.user.userId : req.user.userId;
 
-    if (file) {
+    if (attachment) {
       const fileKey = await this.privateUploadService.handleUpload(
-        file,
+        attachment,
         'appointments',
         req.user.userId,
       );
       dto.fileKey = fileKey;
-      dto.fileType = file.mimetype;
+      dto.fileType = attachment.mimetype;
     }
 
     const data = await this.managerService.addAttachment(
@@ -370,10 +389,10 @@ export class AppointmentsController {
 
   // Agora Video Token
   @UseGuards(AppointmentAccessGuard)
-  @Post(':id/video/token')
+  @Get(':id/video/token')
   async getVideoToken(@Req() req, @Param('id') id: string) {
     const user = req.user;
-    const uid = user.userId;
+    const uid = 0;
     const channelName = `appointment_${id}`;
     const data = await this.managerService.generateAgoraToken(channelName, uid);
     return {
@@ -386,12 +405,10 @@ export class AppointmentsController {
 
   // Agora Chat Token
   @UseGuards(AppointmentAccessGuard)
-  @Post(':id/chat/token')
+  @Get(':id/chat/token')
   async getChatToken(@Req() req, @Param('id') id: string) {
     const user = req.user;
-    const uid = user.userId;
-    const channelName = `appointment_${id}`;
-    const data = await this.managerService.generateAgoraToken(channelName, uid);
+    const data = await this.managerService.generateAgoraChatToken(user.userId);
     return {
       success: true,
       statusCode: 200,

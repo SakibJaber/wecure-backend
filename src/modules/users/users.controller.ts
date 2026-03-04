@@ -131,6 +131,29 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('me/bank-details')
+  async getBankDetails(@Req() req) {
+    try {
+      const bankDetails = await this.usersService.getBankDetails(
+        req.user.userId,
+      );
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Bank details fetched successfully',
+        data: bankDetails,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to fetch bank details',
+        data: null,
+      };
+    }
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Delete('profile')
   async deleteAccount(@Req() req) {
     try {

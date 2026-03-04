@@ -425,6 +425,20 @@ export class UsersService {
       if (user.phone) {
         user.phone = this.encryptionService.decrypt(user.phone) as string;
       }
+      if (user.allergies && typeof user.allergies === 'string') {
+        try {
+          (user as any).allergies = JSON.parse(
+            this.encryptionService.decrypt(user.allergies) as string,
+          );
+        } catch (e) {
+          (user as any).allergies = [];
+        }
+      }
+      if (user.dateOfBirth && typeof user.dateOfBirth === 'string') {
+        (user as any).dateOfBirth = this.encryptionService.decrypt(
+          user.dateOfBirth,
+        );
+      }
 
       // Decrypt bank details if they exist
       if (user.bankName) {
@@ -511,5 +525,31 @@ export class UsersService {
       .findByIdAndUpdate(userId, updateData, { new: true })
       .select('-password')
       .lean();
+  }
+
+  async getBankDetails(userId: string) {
+    const user = await this.userModel
+      .findById(userId)
+      .select('bankName accountName accountNumber')
+      .lean();
+    if (!user) throw new BadRequestException('User not found');
+
+    return {
+      bankName: user.bankName
+        ? this.encryptionService.isEncrypted(user.bankName)
+          ? this.encryptionService.decrypt(user.bankName)
+          : user.bankName
+        : null,
+      accountName: user.accountName
+        ? this.encryptionService.isEncrypted(user.accountName)
+          ? this.encryptionService.decrypt(user.accountName)
+          : user.accountName
+        : null,
+      accountNumber: user.accountNumber
+        ? this.encryptionService.isEncrypted(user.accountNumber)
+          ? this.encryptionService.decrypt(user.accountNumber)
+          : user.accountNumber
+        : null,
+    };
   }
 }

@@ -10,12 +10,15 @@ import { Model } from 'mongoose';
 import { Role } from 'src/common/enum/role.enum';
 import { AppointmentStatus } from 'src/common/enum/appointment-status.enum';
 import { Appointment } from 'src/modules/appointments/schemas/appointment.schema';
+import { Doctor } from 'src/modules/doctors/schemas/doctor.schema';
 
 @Injectable()
 export class AppointmentAccessGuard implements CanActivate {
   constructor(
     @InjectModel(Appointment.name)
     private appointmentModel: Model<Appointment>,
+    @InjectModel(Doctor.name)
+    private doctorModel: Model<Doctor>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -34,7 +37,33 @@ export class AppointmentAccessGuard implements CanActivate {
 
     // Ownership check (doctor OR patient)
     const isPatient = appointment.userId.toString() === user.userId;
-    const isDoctor = appointment.doctorId.toString() === user.doctorId;
+    let isDoctor = false;
+
+    if (user.role === Role.DOCTOR) {
+      const doctorProfile = await this.doctorModel
+        .findOne({ userId: user.userId })
+        .lean();
+
+      console.log('--- Appointment Access Debug ---');
+      console.log('User ID from Token:', user.userId);
+      console.log('Appointment Doctor ID:', appointment.doctorId.toString());
+      if (doctorProfile) {
+        console.log('Found Doctor Profile ID:', doctorProfile._id.toString());
+      } else {
+        console.log('No Doctor Profile found for this User ID');
+      }
+
+      if (
+        doctorProfile &&
+        appointment.doctorId.toString() === doctorProfile._id.toString()
+      ) {
+        isDoctor = true;
+        console.log('Match Found: Access Granted for Doctor');
+      } else {
+        console.log('Match Failed: Access Denied for Doctor');
+      }
+      console.log('--------------------------------');
+    }
 
     if (!isPatient && !isDoctor && user.role !== Role.ADMIN) {
       throw new ForbiddenException(
@@ -42,7 +71,29 @@ export class AppointmentAccessGuard implements CanActivate {
       );
     }
 
-    // Time window check with 5-minute grace period
+    // Differentiate between Chat and Video Call
+    const isChatRequest = request.url.includes('/chat/token');
+
+    // Chat access logic
+    if (isChatRequest) {
+      const allowedChatStatuses = [
+        AppointmentStatus.UPCOMING,
+        AppointmentStatus.ONGOING,
+        AppointmentStatus.COMPLETED,
+      ];
+
+      if (!allowedChatStatuses.includes(appointment.status)) {
+        throw new ForbiddenException(
+          `Chat is not available for appointments with status: ${appointment.status}`,
+        );
+      }
+
+      // If it's a chat request and status is allowed, pass the guard
+      request.appointment = appointment;
+      return true;
+    }
+
+    // Video call access logic (Time window check with 5-minute grace period)
     const now = new Date();
     const start = this.combineDateTime(
       appointment.appointmentDate,
@@ -61,20 +112,12 @@ export class AppointmentAccessGuard implements CanActivate {
       throw new ForbiddenException('Outside appointment time window');
     }
 
-    // Status check
-    // Allow access if ONGOING OR if within grace period (UPCOMING/COMPLETED allowed in grace)
-    if (appointment.status !== AppointmentStatus.ONGOING) {
-      // If status is not ONGOING, we only allow if we are strictly within the grace period
-      // effectively treating the grace period as a valid "active" time regardless of status label
-      // However, if it's CANCELLED, we should probably still deny.
-      if (appointment.status === AppointmentStatus.CANCELLED) {
-        throw new ForbiddenException('Appointment is cancelled');
-      }
+    if (appointment.status === AppointmentStatus.CANCELLED) {
+      throw new ForbiddenException('Appointment is cancelled');
+    }
 
-      // If it's UPCOMING and we are in the early grace period -> Allow
-      // If it's COMPLETED and we are in the late grace period -> Allow
-      // The time window check above already ensures we are within [Start-5, End+5]
-      // So if we passed that, we are good to go unless it's cancelled.
+    if (appointment.status === AppointmentStatus.PENDING) {
+      throw new ForbiddenException('Appointment is still pending');
     }
 
     // Attach appointment for downstream use
