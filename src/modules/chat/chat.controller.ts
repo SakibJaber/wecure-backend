@@ -10,6 +10,7 @@ import {
   Req,
   UseInterceptors,
   UploadedFile,
+  Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ChatService } from './chat.service';
@@ -51,18 +52,60 @@ export class ChatController {
     }
   }
 
+  @Get('messages-by-appointment')
+  async getMessagesByAppointment(
+    @Query('appointmentId') appointmentId: string,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 50,
+    @Req() req,
+  ) {
+    try {
+      const result = await this.chatService.getMessagesByAppointment(
+        appointmentId,
+        req.user.userId,
+        req.user.role,
+        Number(page),
+        Number(limit),
+      );
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Messages fetched successfully',
+        data: result.data,
+        meta: result.meta,
+        conversationId: result.conversationId || null,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: error.status || 400,
+        message: error.message || 'Failed to fetch messages',
+        data: null,
+      };
+    }
+  }
+
   @Get('conversations')
-  async getConversations(@Req() req) {
+  async getConversations(
+    @Query('appointmentId') appointmentId: string,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 20,
+    @Req() req,
+  ) {
     try {
       const result = await this.chatService.getConversations(
         req.user.userId,
         req.user.role,
+        appointmentId,
+        Number(page),
+        Number(limit),
       );
       return {
         success: true,
         statusCode: 200,
         message: 'Conversations fetched successfully',
-        data: result,
+        data: result.data,
+        meta: result.meta,
       };
     } catch (error) {
       return {
@@ -77,6 +120,8 @@ export class ChatController {
   @Get('messages/:conversationId')
   async getMessages(
     @Param('conversationId') conversationId: string,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 50,
     @Req() req,
   ) {
     try {
@@ -84,12 +129,15 @@ export class ChatController {
         conversationId,
         req.user.userId,
         req.user.role,
+        Number(page),
+        Number(limit),
       );
       return {
         success: true,
         statusCode: 200,
         message: 'Messages fetched successfully',
-        data: result,
+        data: result.data,
+        meta: result.meta,
       };
     } catch (error) {
       return {

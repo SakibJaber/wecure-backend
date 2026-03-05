@@ -4,6 +4,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Conversation } from './schemas/conversation.schema';
 import { Message } from './schemas/message.schema';
 import { EncryptionService } from 'src/common/services/encryption.service';
+import { User } from '../users/schemas/user.schema';
 
 describe('ChatService', () => {
   let service: ChatService;
@@ -18,6 +19,10 @@ describe('ChatService', () => {
         },
         {
           provide: getModelToken(Message.name),
+          useValue: {},
+        },
+        {
+          provide: getModelToken(User.name),
           useValue: {},
         },
         {

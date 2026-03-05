@@ -105,6 +105,7 @@ export class ChatGateway
       images?: string[];
       video?: string;
       videoCover?: string;
+      appointmentId?: string;
     },
   ) {
     this.logger.log(

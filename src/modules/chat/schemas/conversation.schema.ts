@@ -36,6 +36,9 @@ export class Conversation {
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Message' }], default: [] })
   messages: Types.ObjectId[];
 
+  @Prop({ type: Types.ObjectId, ref: 'Appointment', default: null })
+  appointmentId: Types.ObjectId;
+
   @Prop({ type: [BlockedBy], default: [] })
   blockedBy: BlockedBy[];
 
