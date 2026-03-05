@@ -8,163 +8,121 @@ import {
   Delete,
   UseGuards,
   Req,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ChatService } from './chat.service';
 import { CreateChatDto } from './dto/create-chat.dto';
 import { UpdateChatDto } from './dto/update-chat.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import { PublicUploadService } from '../public-upload/public-upload.service';
+import { UPLOAD_FOLDERS } from 'src/common/constants/constants';
 
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly publicUploadService: PublicUploadService,
+  ) {}
 
-  @Post()
-  async create(@Req() req, @Body() createChatDto: CreateChatDto) {
+  @Post('upload')
+  @UseInterceptors(FileInterceptor('image'))
+  async uploadImage(@UploadedFile() file: Express.Multer.File) {
     try {
-      const result = await this.chatService.create(
-        createChatDto,
-        req.user.userId,
-        req.user.role,
+      const imageUrl = await this.publicUploadService.handleUpload(
+        file,
+        UPLOAD_FOLDERS.CHAT,
       );
       return {
         success: true,
         statusCode: 201,
-        message: 'Message sent successfully',
-        data: result,
+        message: 'Image uploaded successfully',
+        data: { url: imageUrl },
       };
     } catch (error) {
       return {
         success: false,
         statusCode: error.status || 400,
-        message: error.message || 'Failed to send message',
+        message: error.message || 'Failed to upload image',
         data: null,
       };
     }
   }
 
-  @Get()
-  async findAll(@Req() req) {
+  @Get('conversations')
+  async getConversations(@Req() req) {
     try {
-      const result = await this.chatService.findAll(
+      const result = await this.chatService.getConversations(
         req.user.userId,
         req.user.role,
       );
       return {
         success: true,
         statusCode: 200,
-        message: 'Chats fetched successfully',
+        message: 'Conversations fetched successfully',
         data: result,
       };
     } catch (error) {
       return {
         success: false,
         statusCode: error.status || 400,
-        message: error.message || 'Failed to fetch chats',
+        message: error.message || 'Failed to fetch conversations',
         data: null,
       };
     }
   }
 
-  @Get('appointment/:appointmentId')
-  async findByAppointment(
-    @Param('appointmentId') appointmentId: string,
+  @Get('messages/:conversationId')
+  async getMessages(
+    @Param('conversationId') conversationId: string,
     @Req() req,
   ) {
     try {
-      const result = await this.chatService.findByAppointment(
-        appointmentId,
+      const result = await this.chatService.getMessages(
+        conversationId,
         req.user.userId,
         req.user.role,
       );
       return {
         success: true,
         statusCode: 200,
-        message: 'Appointment chats fetched successfully',
+        message: 'Messages fetched successfully',
         data: result,
       };
     } catch (error) {
       return {
         success: false,
         statusCode: error.status || 400,
-        message: error.message || 'Failed to fetch appointment chats',
+        message: error.message || 'Failed to fetch messages',
         data: null,
       };
     }
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string, @Req() req) {
-    try {
-      const result = await this.chatService.findOne(
-        id,
-        req.user.userId,
-        req.user.role,
-      );
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Chat message fetched successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to fetch chat message',
-        data: null,
-      };
-    }
-  }
-
-  @Patch(':id')
-  async update(
-    @Param('id') id: string,
-    @Body() updateChatDto: UpdateChatDto,
+  @Post('read/:conversationId')
+  async markAsRead(
+    @Param('conversationId') conversationId: string,
     @Req() req,
   ) {
     try {
-      const result = await this.chatService.update(
-        id,
-        updateChatDto,
+      await this.chatService.markAsRead(
+        conversationId,
         req.user.userId,
         req.user.role,
       );
       return {
         success: true,
         statusCode: 200,
-        message: 'Chat message updated successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to update chat message',
+        message: 'Messages marked as read',
         data: null,
       };
-    }
-  }
-
-  @Delete(':id')
-  async remove(@Param('id') id: string, @Req() req) {
-    try {
-      const result = await this.chatService.remove(
-        id,
-        req.user.userId,
-        req.user.role,
-      );
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Chat message deleted successfully',
-        data: result,
-      };
     } catch (error) {
       return {
         success: false,
         statusCode: error.status || 400,
-        message: error.message || 'Failed to delete chat message',
+        message: error.message || 'Failed to mark messages as read',
         data: null,
       };
     }

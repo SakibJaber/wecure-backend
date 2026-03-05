@@ -8,7 +8,16 @@ describe('ChatController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ChatController],
-      providers: [ChatService],
+      providers: [
+        {
+          provide: ChatService,
+          useValue: {
+            getConversations: jest.fn(),
+            getMessages: jest.fn(),
+            markAsRead: jest.fn(),
+          },
+        },
+      ],
     }).compile();
 
     controller = module.get<ChatController>(ChatController);

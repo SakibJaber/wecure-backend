@@ -6,10 +6,17 @@ import {
   ReviewSchema,
 } from 'src/modules/reviews/schemas/review.schema';
 import { MongooseModule } from '@nestjs/mongoose';
+import {
+  Appointment,
+  AppointmentSchema,
+} from '../appointments/schemas/appointment.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Review.name, schema: ReviewSchema }]),
+    MongooseModule.forFeature([
+      { name: Review.name, schema: ReviewSchema },
+      { name: Appointment.name, schema: AppointmentSchema },
+    ]),
   ],
   controllers: [ReviewsController],
   providers: [ReviewsService],

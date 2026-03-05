@@ -5,112 +5,152 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Chat, ChatDocument } from './schemas/chat.schema';
-import { CreateChatDto } from './dto/create-chat.dto';
-import { UpdateChatDto } from './dto/update-chat.dto';
+import {
+  Conversation,
+  ConversationDocument,
+} from './schemas/conversation.schema';
+import { Message, MessageDocument } from './schemas/message.schema';
 import { EncryptionService } from 'src/common/services/encryption.service';
 
 @Injectable()
 export class ChatService {
   constructor(
-    @InjectModel(Chat.name)
-    private readonly chatModel: Model<ChatDocument>,
+    @InjectModel(Conversation.name)
+    private readonly conversationModel: Model<ConversationDocument>,
+    @InjectModel(Message.name)
+    private readonly messageModel: Model<MessageDocument>,
     private readonly encryptionService: EncryptionService,
   ) {}
 
-  async create(
-    createChatDto: CreateChatDto,
-    senderId: string,
-    senderRole: string,
-  ) {
-    const encryptedMessage = this.encryptionService.encrypt(
-      createChatDto.message,
-    );
-    const chat = new this.chatModel({
-      ...createChatDto,
-      appointmentId: new Types.ObjectId(createChatDto.appointmentId),
-      senderId: new Types.ObjectId(senderId),
-      senderRole,
-      message: encryptedMessage,
+  async saveMessage(payload: {
+    sender: { id: string; role: string };
+    receiver: { id: string; role: string };
+    text: string;
+    images?: string[];
+    video?: string;
+    videoCover?: string;
+  }) {
+    const { sender, receiver, text, images, video, videoCover } = payload;
+
+    const senderId = new Types.ObjectId(sender.id);
+    const receiverId = new Types.ObjectId(receiver.id);
+
+    // 1. Find or create conversation
+    let conversation = await this.conversationModel.findOne({
+      'participants.id': {
+        $all: [senderId, receiverId],
+      },
     });
-    return chat.save();
-  }
 
-  async findAll(userId: string, role: string) {
-    // This might need to be filtered by appointmentId or similar
-    // For now, let's assume we want to see chats where the user is the sender
-    // or related to an appointment they are part of.
-    // This is a simplified version.
-    const chats = await this.chatModel
-      .find({
-        $or: [{ senderId: new Types.ObjectId(userId) }],
-      })
-      .lean();
-
-    return chats.map((chat) => ({
-      ...chat,
-      message: this.encryptionService.decrypt(chat.message),
-    }));
-  }
-
-  async findByAppointment(appointmentId: string, userId: string, role: string) {
-    const chats = await this.chatModel
-      .find({ appointmentId: new Types.ObjectId(appointmentId) })
-      .lean();
-
-    // In a real app, we'd verify the user is part of the appointment here
-
-    return chats.map((chat) => ({
-      ...chat,
-      message: this.encryptionService.decrypt(chat.message),
-    }));
-  }
-
-  async findOne(id: string, userId: string, role: string) {
-    const chat = await this.chatModel.findById(id).lean();
-    if (!chat) throw new NotFoundException('Chat not found');
-
-    if (role !== 'ADMIN' && chat.senderId.toString() !== userId) {
-      throw new ForbiddenException('Access denied');
+    if (!conversation) {
+      conversation = await this.conversationModel.create({
+        participants: [
+          { id: senderId, role: sender.role },
+          { id: receiverId, role: receiver.role },
+        ],
+        messages: [],
+      });
     }
 
+    // 2. Encrypt message text
+    const encryptedText = text ? this.encryptionService.encrypt(text) : '';
+
+    // 3. Save message
+    const newMessage = (await this.messageModel.create({
+      conversationId: conversation._id,
+      sender: { id: senderId, role: sender.role },
+      receiver: { id: receiverId, role: receiver.role },
+      text: encryptedText,
+      images: images || [],
+      video: video || null,
+      videoCover: videoCover || null,
+      seen: false,
+    })) as MessageDocument;
+
+    // 4. Update conversation
+    await this.conversationModel.updateOne(
+      { _id: (conversation as any)._id },
+      {
+        $push: { messages: newMessage._id as Types.ObjectId },
+        $set: { 'meta.lastActivityAt': new Date() },
+      },
+    );
+
+    return this.decryptMessage(newMessage.toObject());
+  }
+
+  async getConversationUpdate(conversationId: string, lastMessage: any) {
+    const conversation = (await this.conversationModel
+      .findById(new Types.ObjectId(conversationId))
+      .lean()) as any;
+    if (!conversation) return null;
+
     return {
-      ...chat,
-      message: this.encryptionService.decrypt(chat.message),
+      conversationId,
+      participants: conversation.participants,
+      lastMessage,
+      updatedAt: new Date(),
     };
   }
 
-  async update(
-    id: string,
-    updateChatDto: UpdateChatDto,
-    userId: string,
-    role: string,
-  ) {
-    const chat = await this.chatModel.findById(id);
-    if (!chat) throw new NotFoundException('Chat not found');
-
-    if (role !== 'ADMIN' && chat.senderId.toString() !== userId) {
-      throw new ForbiddenException('Access denied');
-    }
-
-    if (updateChatDto.message) {
-      updateChatDto.message = this.encryptionService.encrypt(
-        updateChatDto.message,
-      );
-    }
-
-    Object.assign(chat, updateChatDto);
-    return chat.save();
+  async markAsRead(conversationId: string, userId: string, role: string) {
+    await this.messageModel.updateMany(
+      {
+        conversationId: new Types.ObjectId(conversationId),
+        'receiver.id': new Types.ObjectId(userId),
+        'receiver.role': role,
+        seen: false,
+      },
+      { $set: { seen: true } },
+    );
   }
 
-  async remove(id: string, userId: string, role: string) {
-    const chat = await this.chatModel.findById(id);
-    if (!chat) throw new NotFoundException('Chat not found');
-
-    if (role !== 'ADMIN' && chat.senderId.toString() !== userId) {
-      throw new ForbiddenException('Access denied');
+  async decryptMessage(message: any) {
+    if (message && message.text) {
+      message.text = this.encryptionService.decrypt(message.text);
     }
+    return message;
+  }
 
-    return this.chatModel.findByIdAndDelete(id);
+  async getConversations(userId: string, role: string) {
+    const conversations = await this.conversationModel
+      .find({
+        'participants.id': new Types.ObjectId(userId),
+      })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    return conversations;
+  }
+
+  async getMessages(conversationId: string, userId: string, role: string) {
+    const convoId = new Types.ObjectId(conversationId);
+
+    // Check if user is part of conversation
+    const conversation = (await this.conversationModel
+      .findById(convoId)
+      .lean()) as any;
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    const isParticipant = conversation.participants.some(
+      (p: any) => p.id.toString() === userId,
+    );
+    if (!isParticipant) throw new ForbiddenException('Access denied');
+
+    const messages = await this.messageModel
+      .find({ conversationId: convoId })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    return messages.map((m: any) => {
+      if (m.text) {
+        m.text = this.encryptionService.decrypt(m.text);
+      }
+      return m;
+    });
+  }
+
+  async findAll(userId: string, role: string) {
+    return this.getConversations(userId, role);
   }
 }

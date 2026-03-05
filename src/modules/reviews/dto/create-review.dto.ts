@@ -14,14 +14,6 @@ export class CreateReviewDto {
   appointmentId: string;
 
   @IsNotEmpty()
-  @IsMongoId()
-  userId: string;
-
-  @IsNotEmpty()
-  @IsMongoId()
-  doctorId: string;
-
-  @IsNotEmpty()
   @IsNumber()
   @Min(1)
   @Max(5)
