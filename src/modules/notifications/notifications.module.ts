@@ -11,6 +11,7 @@ import { MailModule } from '../mail/mail.module';
 import { UsersModule } from '../users/users.module';
 import { PushService } from './push.service';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { Doctor, DoctorSchema } from '../doctors/schemas/doctor.schema';
 
 @Global()
 @Module({
@@ -18,6 +19,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
     MongooseModule.forFeature([
       { name: Notification.name, schema: NotificationSchema },
       { name: User.name, schema: UserSchema },
+      { name: Doctor.name, schema: DoctorSchema },
     ]),
     MailModule,
     UsersModule,

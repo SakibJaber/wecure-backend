@@ -5,6 +5,9 @@ import { MailService } from '../mail/mail.service';
 import { NotificationType } from 'src/common/enum/notification-type.enum';
 import { UsersService } from '../users/users.service';
 import { PushService } from './push.service';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
 
 @Injectable()
 export class NotificationsListener {
@@ -15,6 +18,7 @@ export class NotificationsListener {
     private readonly mailService: MailService,
     private readonly usersService: UsersService,
     private readonly pushService: PushService,
+    @InjectModel(Doctor.name) private doctorModel: Model<DoctorDocument>,
   ) {}
 
   @OnEvent('appointment.created')
@@ -31,53 +35,39 @@ export class NotificationsListener {
       userId,
       NotificationType.APPOINTMENT_CREATED,
       'Appointment Request Submitted',
-      `Your appointment request for ${dateStr} at ${appointmentTime} has been submitted. Awaiting doctor approval.`,
+      `Your appointment request for ${dateStr} at ${appointmentTime} has been submitted.`,
       { appointmentId: payload._id, role: 'PATIENT' },
     );
 
-    // Notify Doctor
-    await this.notificationsService.createInAppNotification(
-      doctorId,
-      NotificationType.APPOINTMENT_CREATED,
-      'New Appointment Request',
-      `You have a new appointment request for ${dateStr} at ${appointmentTime}. Please review and accept/reject.`,
-      { appointmentId: payload._id, role: 'DOCTOR' },
-    );
+    const doctorProfile = await this.doctorModel.findById(doctorId).lean();
 
-    // Send Emails
-    const [patient, doctor] = await Promise.all([
-      this.usersService.findById(userId),
-      this.usersService.findById(doctorId), // Doctor profile usually linked to user, but here doctorId might be profile ID.
-      // Wait, Appointment payload has doctorId as Profile ID usually.
-      // Let's check Appointment Service create.
-      // It uses doctorId from DTO which is Profile ID.
-      // But we need User ID to get email.
-      // Doctor Profile has userId.
-      // We need to fetch Doctor Profile first if doctorId is Profile ID.
-      // But let's assume for now we can try to find user by that ID, if not found, it might be profile.
-      // Actually, let's look at AppointmentsService.create.
-      // It saves doctorId (Profile ID).
-      // So we need to fetch Doctor Profile to get User ID.
-      // But UsersService only handles Users.
-      // We might need DoctorsService too? Or just rely on what we have.
-      // To keep it simple and avoid circular deps or too many deps, let's try to fetch User.
-      // If doctorId is Profile ID, UsersService.findById(doctorId) will return null.
-      // We can skip email for doctor if we can't easily resolve it without DoctorsService.
-      // OR, we can just send to Patient for now as they are definitely a User.
-    ]);
+    this.logger.log(`Fetched doctor profile: ${JSON.stringify(doctorProfile)}`);
 
-    if (patient && patient.email) {
-      await this.mailService.sendEmail(
-        patient.email,
-        'Appointment Confirmation',
-        `Your appointment on ${dateStr} at ${appointmentTime} has been scheduled.`,
+    if (doctorProfile) {
+      this.logger.log(`Doctor userId is: ${doctorProfile.userId}`);
+      // Notify Doctor
+      await this.notificationsService.createInAppNotification(
+        doctorProfile.userId,
+        NotificationType.APPOINTMENT_CREATED,
+        'New Appointment Request',
+        `You have a new appointment request for ${dateStr} at ${appointmentTime}.`,
+        { appointmentId: payload._id, role: 'DOCTOR' },
       );
-    }
 
-    // For Doctor email, we'd ideally need to resolve User from Doctor Profile.
-    // Since we don't have DoctorsService here, we'll skip it for this iteration
-    // or we'd need to inject DoctorsService (which might cause circular dep if DoctorsModule imports NotificationsModule).
-    // Let's stick to Patient email for now to demonstrate the capability.
+      this.logger.log(`Created in app notification for doctor`);
+
+      // Send Push Notification
+      await this.pushService.sendToUser(
+        doctorProfile.userId.toString(),
+        'New Appointment Request',
+        `You have a new appointment request for ${dateStr} at ${appointmentTime}.`,
+        { type: 'APPOINTMENT_CREATED', appointmentId: payload._id.toString() },
+      );
+
+      this.logger.log(`Sent push notification for doctor`);
+    } else {
+      this.logger.warn(`Doctor profile NOT FOUND for doctorId: ${doctorId}`);
+    }
   }
 
   @OnEvent('appointment.updated')
@@ -460,5 +450,69 @@ export class NotificationsListener {
         `Unfortunately, your appointment request for ${dateStr} at ${appointmentTime} was declined by the doctor.${reasonText}`,
       );
     }
+  }
+
+  @OnEvent('chat.message.sent')
+  async handleChatMessageSent(payload: any) {
+    const { message, sender, receiver } = payload;
+    this.logger.log(
+      `Handling chat.message.sent to ${receiver.id} (${receiver.role})`,
+    );
+
+    let recipientUserId = receiver.id;
+
+    if (receiver.role.toUpperCase() === 'DOCTOR') {
+      const doctorProfile = await this.doctorModel.findById(receiver.id).lean();
+      if (doctorProfile && doctorProfile.userId) {
+        recipientUserId = doctorProfile.userId.toString();
+      } else {
+        this.logger.warn(
+          `Could not find doctor profile for chat push: ${receiver.id}`,
+        );
+        return;
+      }
+    }
+
+    let senderName = 'Someone';
+    try {
+      let senderUserId = sender.id;
+      if (sender.role.toUpperCase() === 'DOCTOR') {
+        const docProfile = await this.doctorModel.findById(sender.id).lean();
+        if (docProfile && docProfile.userId) {
+          senderUserId = docProfile.userId.toString();
+        }
+      }
+      const senderUser = await this.usersService.findById(senderUserId);
+      if (senderUser && senderUser.name) {
+        senderName = senderUser.name;
+      }
+      if (sender.role.toUpperCase() === 'DOCTOR') {
+        senderName = `Dr. ${senderName.replace('Dr. ', '')}`;
+      }
+    } catch (e) {
+      this.logger.warn('Failed to fetch sender name for chat push');
+    }
+
+    // Determine message preview
+    let bodyPreview = 'New message';
+    if (message.text) {
+      bodyPreview = message.text.substring(0, 100);
+    } else if (message.images && message.images.length > 0) {
+      bodyPreview = '📷 Sent an image';
+    } else if (message.video) {
+      bodyPreview = '🎥 Sent a video';
+    }
+
+    await this.pushService.sendToUser(
+      recipientUserId.toString(),
+      `New message from ${senderName}`,
+      bodyPreview,
+      {
+        type: 'CHAT_MESSAGE',
+        conversationId: message.conversationId.toString(),
+        senderId: sender.id.toString(),
+        senderRole: sender.role,
+      },
+    );
   }
 }

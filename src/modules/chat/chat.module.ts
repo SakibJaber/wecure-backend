@@ -12,6 +12,11 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PublicUploadModule } from '../public-upload/public-upload.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import {
+  Appointment,
+  AppointmentSchema,
+} from '../appointments/schemas/appointment.schema';
+import { Doctor, DoctorSchema } from '../doctors/schemas/doctor.schema';
 
 @Module({
   imports: [
@@ -19,6 +24,8 @@ import { User, UserSchema } from '../users/schemas/user.schema';
       { name: Conversation.name, schema: ConversationSchema },
       { name: Message.name, schema: MessageSchema },
       { name: User.name, schema: UserSchema },
+      { name: Appointment.name, schema: AppointmentSchema },
+      { name: Doctor.name, schema: DoctorSchema },
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],

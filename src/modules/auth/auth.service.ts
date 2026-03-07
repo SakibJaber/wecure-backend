@@ -169,8 +169,11 @@ export class AuthService {
     }
   }
 
-  async logout(userId: string) {
+  async logout(userId: string, fcmToken?: string) {
     await this.usersService.updateRefreshToken(userId, null);
+    if (fcmToken) {
+      await this.usersService.removeFcmToken(userId, fcmToken);
+    }
   }
 
   async refreshTokens(userId: string, refreshToken: string) {
@@ -240,8 +243,6 @@ export class AuthService {
       refreshToken,
     };
   }
-
-
 
   private generateOtp(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();

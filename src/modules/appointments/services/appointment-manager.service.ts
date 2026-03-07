@@ -128,8 +128,6 @@ export class AppointmentManagerService {
 
       await session.commitTransaction();
 
-      this.notificationsService.emit('appointment.created', appointment[0]);
-
       return appointment[0];
     } catch (e) {
       await session.abortTransaction();
@@ -340,7 +338,7 @@ export class AppointmentManagerService {
   }
 
   async markAsPaid(appointmentId: string, paymentId: string) {
-    return this.appointmentModel.findByIdAndUpdate(
+    const appointment = await this.appointmentModel.findByIdAndUpdate(
       appointmentId,
       {
         paymentId: new Types.ObjectId(paymentId),
@@ -348,6 +346,12 @@ export class AppointmentManagerService {
       },
       { new: true },
     );
+
+    if (appointment) {
+      this.notificationsService.emit('appointment.created', appointment);
+    }
+
+    return appointment;
   }
 
   // ---------------- Helpers ----------------

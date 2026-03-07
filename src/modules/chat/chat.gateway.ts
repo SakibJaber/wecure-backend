@@ -13,6 +13,7 @@ import { ChatService } from './chat.service';
 import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @WebSocketGateway({
   cors: {
@@ -36,6 +37,7 @@ export class ChatGateway
     private readonly chatService: ChatService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   afterInit(server: Server) {
@@ -142,6 +144,13 @@ export class ChatGateway
       this.server
         .to(senderRoom)
         .emit('conversation_update', conversationUpdate);
+
+      // Emit event for push notifications
+      this.eventEmitter.emit('chat.message.sent', {
+        message: savedMessage,
+        sender: payload.sender,
+        receiver: payload.receiver,
+      });
     } catch (error) {
       this.logger.error(`Error handling message: ${error.message}`);
       socket.emit('error', { message: error.message });

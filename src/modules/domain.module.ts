@@ -21,6 +21,7 @@ import { SeederModule } from 'src/modules/seeder/seeder.module';
 import { AgoraModule } from 'src/modules/agora/agora.module';
 import { RefundsModule } from './refunds/refunds.module';
 import { PayoutsModule } from './payouts/payouts.module';
+import { FirebaseModule } from './firebase/firebase.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { PayoutsModule } from './payouts/payouts.module';
     LegalContentModule,
     RefundsModule,
     PayoutsModule,
+    FirebaseModule,
   ],
   controllers: [AppController],
   providers: [AppService],

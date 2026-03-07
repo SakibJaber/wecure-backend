@@ -52,38 +52,39 @@ export class ChatController {
     }
   }
 
-  @Get('messages-by-appointment')
-  async getMessagesByAppointment(
-    @Query('appointmentId') appointmentId: string,
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 50,
-    @Req() req,
-  ) {
-    try {
-      const result = await this.chatService.getMessagesByAppointment(
-        appointmentId,
-        req.user.userId,
-        req.user.role,
-        Number(page),
-        Number(limit),
-      );
-      return {
-        success: true,
-        statusCode: 200,
-        message: 'Messages fetched successfully',
-        data: result.data,
-        meta: result.meta,
-        conversationId: result.conversationId || null,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: error.status || 400,
-        message: error.message || 'Failed to fetch messages',
-        data: null,
-      };
-    }
-  }
+  // @Get('messages-by-appointment')
+  // async getMessagesByAppointment(
+  //   @Query('appointmentId') appointmentId: string,
+  //   @Query('page') page: number = 1,
+  //   @Query('limit') limit: number = 50,
+  //   @Req() req,
+  // ) {
+  //   try {
+  //     const result = await this.chatService.getMessagesByAppointment(
+  //       appointmentId,
+  //       req.user.userId,
+  //       req.user.role,
+  //       Number(page),
+  //       Number(limit),
+  //     );
+  //     return {
+  //       success: true,
+  //       statusCode: 200,
+  //       message: 'Messages fetched successfully',
+  //       conversationId: result.conversationId || null,
+  //       recipient: result.recipient || null,
+  //       data: result.data,
+  //       meta: result.meta,
+  //     };
+  //   } catch (error) {
+  //     return {
+  //       success: false,
+  //       statusCode: error.status || 400,
+  //       message: error.message || 'Failed to fetch messages',
+  //       data: null,
+  //     };
+  //   }
+  // }
 
   @Get('conversations')
   async getConversations(

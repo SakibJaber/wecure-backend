@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from 'src/modules/users/schemas/user.schema';
-
+import { FirebaseService } from '../firebase/firebase.service';
 
 @Injectable()
 export class PushService {
@@ -11,11 +11,11 @@ export class PushService {
   constructor(
     @InjectModel(User.name)
     private userModel: Model<UserDocument>,
+    private firebaseService: FirebaseService,
   ) {}
 
   /**
    * Sends a push notification to a user's registered devices.
-   * Currently logs to console; integrate Firebase Admin SDK here.
    */
   async sendToUser(
     userId: string,
@@ -34,20 +34,54 @@ export class PushService {
         return;
       }
 
-      // TODO: Replace with Firebase Admin SDK
-      // Example:
-      // const message = {
-      //   notification: { title, body },
-      //   data,
-      //   tokens: user.fcmTokens,
-      // };
-      // await admin.messaging().sendEachForMulticast(message);
+      // Prepare text values for data payload as FCM data requires string values
+      const stringifiedData: Record<string, string> = {};
+      for (const [key, value] of Object.entries(data)) {
+        stringifiedData[key] = String(value);
+      }
+
+      const message = {
+        notification: { title, body },
+        data: stringifiedData,
+        tokens: user.fcmTokens,
+      };
+
+      const response =
+        await this.firebaseService.messaging.sendEachForMulticast(message);
 
       this.logger.log(
-        `[PUSH STUB] Would send to user ${userId}: "${title}" - "${body}"`,
+        `Successfully sent ${response.successCount} messages to user ${userId}`,
       );
-      this.logger.debug(`[PUSH STUB] Tokens: ${user.fcmTokens.join(', ')}`);
-      this.logger.debug(`[PUSH STUB] Data: ${JSON.stringify(data)}`);
+      if (response.failureCount > 0) {
+        this.logger.warn(
+          `Failed to send ${response.failureCount} messages to user ${userId}`,
+        );
+
+        // Handle invalid tokens
+        const failedTokens: string[] = [];
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            const errorCode = resp.error?.code;
+            if (
+              errorCode === 'messaging/invalid-registration-token' ||
+              errorCode === 'messaging/registration-token-not-registered' ||
+              errorCode === 'messaging/invalid-argument'
+            ) {
+              failedTokens.push(user.fcmTokens[idx]);
+            }
+          }
+        });
+
+        if (failedTokens.length > 0) {
+          // Remove invalid tokens from user
+          await this.userModel.findByIdAndUpdate(userId, {
+            $pull: { fcmTokens: { $in: failedTokens } },
+          });
+          this.logger.log(
+            `Removed ${failedTokens.length} invalid FCM tokens for user ${userId}`,
+          );
+        }
+      }
     } catch (error) {
       this.logger.error(`Failed to send push to user ${userId}`, error);
     }

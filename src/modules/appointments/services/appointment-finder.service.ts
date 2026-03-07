@@ -92,8 +92,24 @@ export class AppointmentFinderService {
             {
               $lookup: {
                 from: 'doctors',
-                localField: 'doctorId',
-                foreignField: '_id',
+                let: { doctorId: '$doctorId' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $or: [
+                          { $eq: ['$_id', '$$doctorId'] },
+                          {
+                            $eq: [
+                              { $toString: '$_id' },
+                              { $toString: '$$doctorId' },
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                  },
+                ],
                 as: 'doctor',
               },
             },
@@ -101,8 +117,24 @@ export class AppointmentFinderService {
             {
               $lookup: {
                 from: 'users',
-                localField: 'doctor.userId',
-                foreignField: '_id',
+                let: { userId: '$doctor.userId' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $or: [
+                          { $eq: ['$_id', '$$userId'] },
+                          {
+                            $eq: [
+                              { $toString: '$_id' },
+                              { $toString: '$$userId' },
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                  },
+                ],
                 as: 'doctorUser',
               },
             },
@@ -115,8 +147,24 @@ export class AppointmentFinderService {
             {
               $lookup: {
                 from: 'specialists',
-                localField: 'specialistId',
-                foreignField: '_id',
+                let: { specialistId: '$specialistId' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $or: [
+                          { $eq: ['$_id', '$$specialistId'] },
+                          {
+                            $eq: [
+                              { $toString: '$_id' },
+                              { $toString: '$$specialistId' },
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                  },
+                ],
                 as: 'specialty',
               },
             },
@@ -182,8 +230,24 @@ export class AppointmentFinderService {
             {
               $lookup: {
                 from: 'users',
-                localField: 'userId',
-                foreignField: '_id',
+                let: { userId: '$userId' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $or: [
+                          { $eq: ['$_id', '$$userId'] },
+                          {
+                            $eq: [
+                              { $toString: '$_id' },
+                              { $toString: '$$userId' },
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                  },
+                ],
                 as: 'patientUser',
               },
             },
@@ -196,8 +260,24 @@ export class AppointmentFinderService {
             {
               $lookup: {
                 from: 'specialists',
-                localField: 'specialistId',
-                foreignField: '_id',
+                let: { specialistId: '$specialistId' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $or: [
+                          { $eq: ['$_id', '$$specialistId'] },
+                          {
+                            $eq: [
+                              { $toString: '$_id' },
+                              { $toString: '$$specialistId' },
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                  },
+                ],
                 as: 'specialty',
               },
             },

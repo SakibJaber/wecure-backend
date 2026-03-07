@@ -82,9 +82,9 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('logout')
-  async logout(@Req() req) {
+  async logout(@Req() req, @Body() body: { fcmToken?: string }) {
     try {
-      await this.authService.logout(req.user.userId);
+      await this.authService.logout(req.user.userId, body.fcmToken);
       return {
         success: true,
         statusCode: 200,
