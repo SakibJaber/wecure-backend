@@ -1,10 +1,15 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RtcTokenBuilder, RtcRole, ChatTokenBuilder } from 'agora-token';
 import axios from 'axios';
 
 @Injectable()
 export class AgoraService {
+  private readonly logger = new Logger(AgoraService.name);
   private appId: string;
   private appCertificate: string;
   private chatAppKey: string;
@@ -22,7 +27,7 @@ export class AgoraService {
     this.chatAppKey = appName ? `${appKey}#${appName}` : appKey;
 
     if (!this.appId || !this.appCertificate) {
-      console.warn('Agora credentials not found in environment variables');
+      this.logger.warn('Agora credentials not found in environment variables');
     }
   }
 
@@ -65,7 +70,7 @@ export class AgoraService {
         token,
       };
     } catch (error) {
-      console.error('Agora token generation error:', error);
+      this.logger.error('Agora token generation error:', error);
       throw new InternalServerErrorException('Failed to generate Agora token');
     }
   }
@@ -97,7 +102,7 @@ export class AgoraService {
         expirationInSeconds,
       };
     } catch (error) {
-      console.error('Agora chat token generation error:', error);
+      this.logger.error('Agora chat token generation error:', error);
       throw new InternalServerErrorException(
         'Failed to generate Agora chat token: ' + (error.message || ''),
       );
@@ -133,16 +138,12 @@ export class AgoraService {
           },
         },
       );
-      console.log(`Successfully registered Agora Chat user: ${username}`);
     } catch (error) {
       // If user already exists, it might return 400 or 409 depending on the API version/state
       if (error.response?.status === 400 || error.response?.status === 409) {
-        console.log(
-          `Agora Chat user already exists or registration skipped: ${username}`,
-        );
-        return;
+        return; // User already registered, silently skip
       }
-      console.error(
+      this.logger.error(
         'Error registering Agora Chat user:',
         error.response?.data || error.message,
       );

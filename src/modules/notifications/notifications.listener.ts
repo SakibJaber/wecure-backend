@@ -30,41 +30,38 @@ export class NotificationsListener {
     const { userId, doctorId, appointmentDate, appointmentTime } = payload;
     const dateStr = new Date(appointmentDate).toLocaleDateString();
 
-    // Notify Patient
-    await this.notificationsService.createInAppNotification(
-      userId,
-      NotificationType.APPOINTMENT_CREATED,
-      'Appointment Request Submitted',
-      `Your appointment request for ${dateStr} at ${appointmentTime} has been submitted.`,
-      { appointmentId: payload._id, role: 'PATIENT' },
-    );
-
-    const doctorProfile = await this.doctorModel.findById(doctorId).lean();
-
-    this.logger.log(`Fetched doctor profile: ${JSON.stringify(doctorProfile)}`);
+    // Fetch doctor profile and notify patient concurrently
+    const [, doctorProfile] = await Promise.all([
+      this.notificationsService.createInAppNotification(
+        userId,
+        NotificationType.APPOINTMENT_CREATED,
+        'Appointment Request Submitted',
+        `Your appointment request for ${dateStr} at ${appointmentTime} has been submitted.`,
+        { appointmentId: payload._id, role: 'PATIENT' },
+      ),
+      this.doctorModel.findById(doctorId).lean(),
+    ]);
 
     if (doctorProfile) {
-      this.logger.log(`Doctor userId is: ${doctorProfile.userId}`);
-      // Notify Doctor
-      await this.notificationsService.createInAppNotification(
-        doctorProfile.userId,
-        NotificationType.APPOINTMENT_CREATED,
-        'New Appointment Request',
-        `You have a new appointment request for ${dateStr} at ${appointmentTime}.`,
-        { appointmentId: payload._id, role: 'DOCTOR' },
-      );
-
-      this.logger.log(`Created in app notification for doctor`);
-
-      // Send Push Notification
-      await this.pushService.sendToUser(
-        doctorProfile.userId.toString(),
-        'New Appointment Request',
-        `You have a new appointment request for ${dateStr} at ${appointmentTime}.`,
-        { type: 'APPOINTMENT_CREATED', appointmentId: payload._id.toString() },
-      );
-
-      this.logger.log(`Sent push notification for doctor`);
+      // Notify doctor via in-app + push concurrently
+      await Promise.all([
+        this.notificationsService.createInAppNotification(
+          doctorProfile.userId,
+          NotificationType.APPOINTMENT_CREATED,
+          'New Appointment Request',
+          `You have a new appointment request for ${dateStr} at ${appointmentTime}.`,
+          { appointmentId: payload._id, role: 'DOCTOR' },
+        ),
+        this.pushService.sendToUser(
+          doctorProfile.userId.toString(),
+          'New Appointment Request',
+          `You have a new appointment request for ${dateStr} at ${appointmentTime}.`,
+          {
+            type: 'APPOINTMENT_CREATED',
+            appointmentId: payload._id.toString(),
+          },
+        ),
+      ]);
     } else {
       this.logger.warn(`Doctor profile NOT FOUND for doctorId: ${doctorId}`);
     }
@@ -75,25 +72,25 @@ export class NotificationsListener {
     this.logger.log(
       `Handling appointment.updated event for appointment ${payload._id}`,
     );
-    const { userId, doctorId, appointmentDate, appointmentTime } = payload;
-    const dateStr = new Date(appointmentDate).toLocaleDateString();
+    const { userId, doctorId } = payload;
 
-    // Notify Patient
-    await this.notificationsService.createInAppNotification(
-      userId,
-      NotificationType.APPOINTMENT_UPDATED,
-      'Appointment Updated',
-      `Your appointment details have been updated.`,
-      { appointmentId: payload._id },
-    );
-    // Notify Doctor
-    await this.notificationsService.createInAppNotification(
-      doctorId,
-      NotificationType.APPOINTMENT_UPDATED,
-      'Appointment Updated',
-      `Appointment details have been updated.`,
-      { appointmentId: payload._id },
-    );
+    // Notify patient and doctor concurrently
+    await Promise.all([
+      this.notificationsService.createInAppNotification(
+        userId,
+        NotificationType.APPOINTMENT_UPDATED,
+        'Appointment Updated',
+        `Your appointment details have been updated.`,
+        { appointmentId: payload._id },
+      ),
+      this.notificationsService.createInAppNotification(
+        doctorId,
+        NotificationType.APPOINTMENT_UPDATED,
+        'Appointment Updated',
+        `Appointment details have been updated.`,
+        { appointmentId: payload._id },
+      ),
+    ]);
   }
 
   @OnEvent('appointment.status_change')
@@ -142,24 +139,26 @@ export class NotificationsListener {
     }
 
     if (type && title && messagePatient && messageDoctor) {
-      if (userId) {
-        await this.notificationsService.createInAppNotification(
-          userId,
-          type,
-          title,
-          messagePatient,
-          { appointmentId },
-        );
-      }
-      if (doctorId) {
-        await this.notificationsService.createInAppNotification(
-          doctorId,
-          type,
-          title,
-          messageDoctor,
-          { appointmentId },
-        );
-      }
+      await Promise.all([
+        userId
+          ? this.notificationsService.createInAppNotification(
+              userId,
+              type,
+              title,
+              messagePatient,
+              { appointmentId },
+            )
+          : Promise.resolve(),
+        doctorId
+          ? this.notificationsService.createInAppNotification(
+              doctorId,
+              type,
+              title,
+              messageDoctor,
+              { appointmentId },
+            )
+          : Promise.resolve(),
+      ]);
     }
   }
 
@@ -193,58 +192,64 @@ export class NotificationsListener {
     const dateStr = new Date(appointment.appointmentDate).toLocaleDateString();
     const userId = appointment.userId._id || appointment.userId;
     const doctorUser = appointment.doctorId?.userId;
-
-    // In-App Notification for Patient
-    await this.notificationsService.createInAppNotification(
-      userId,
-      notificationType,
-      'Appointment Reminder',
-      `Your appointment is in ${timeLabel} (${dateStr} at ${appointment.appointmentTime}).`,
-      { appointmentId: appointment._id },
-    );
-
-    // Push Notification for Patient
-    await this.pushService.sendToUser(
-      userId.toString(),
-      'Appointment Reminder',
-      `Your appointment is in ${timeLabel}.`,
-      {
-        appointmentId: appointment._id.toString(),
-        type: 'APPOINTMENT_REMINDER',
-      },
-    );
-
-    // Email for Patient
     const patientEmail = appointment.userId?.email;
-    if (patientEmail) {
-      await this.mailService.sendEmail(
-        patientEmail,
-        'Appointment Reminder',
-        `This is a reminder that your appointment is in ${timeLabel} (${dateStr} at ${appointment.appointmentTime}).`,
-      );
-    }
 
-    // Notify Doctor if available
-    if (doctorUser) {
-      const doctorUserId = doctorUser._id || doctorUser;
-      await this.notificationsService.createInAppNotification(
-        doctorUserId,
+    // Fire all patient notifications concurrently
+    const patientTasks: Promise<any>[] = [
+      this.notificationsService.createInAppNotification(
+        userId,
         notificationType,
         'Appointment Reminder',
-        `You have an appointment in ${timeLabel}.`,
+        `Your appointment is in ${timeLabel} (${dateStr} at ${appointment.appointmentTime}).`,
         { appointmentId: appointment._id },
-      );
-
-      await this.pushService.sendToUser(
-        doctorUserId.toString(),
+      ),
+      this.pushService.sendToUser(
+        userId.toString(),
         'Appointment Reminder',
-        `You have an appointment in ${timeLabel}.`,
+        `Your appointment is in ${timeLabel}.`,
         {
           appointmentId: appointment._id.toString(),
           type: 'APPOINTMENT_REMINDER',
         },
+      ),
+    ];
+
+    if (patientEmail) {
+      patientTasks.push(
+        this.mailService.sendEmail(
+          patientEmail,
+          'Appointment Reminder',
+          `This is a reminder that your appointment is in ${timeLabel} (${dateStr} at ${appointment.appointmentTime}).`,
+        ),
       );
     }
+
+    // Fire all doctor notifications concurrently (if doctor info available)
+    const doctorTasks: Promise<any>[] = [];
+    if (doctorUser) {
+      const doctorUserId = doctorUser._id || doctorUser;
+      doctorTasks.push(
+        this.notificationsService.createInAppNotification(
+          doctorUserId,
+          notificationType,
+          'Appointment Reminder',
+          `You have an appointment in ${timeLabel}.`,
+          { appointmentId: appointment._id },
+        ),
+        this.pushService.sendToUser(
+          doctorUserId.toString(),
+          'Appointment Reminder',
+          `You have an appointment in ${timeLabel}.`,
+          {
+            appointmentId: appointment._id.toString(),
+            type: 'APPOINTMENT_REMINDER',
+          },
+        ),
+      );
+    }
+
+    // Run patient and doctor notification groups concurrently
+    await Promise.all([...patientTasks, ...doctorTasks]);
   }
 
   @OnEvent('doctor.verified')
@@ -252,24 +257,24 @@ export class NotificationsListener {
     const { userId, email, name } = payload;
     this.logger.log(`Handling doctor.verified for user ${userId}`);
 
-    await this.notificationsService.createInAppNotification(
-      userId,
-      NotificationType.DOCTOR_VERIFIED,
-      'Verification Approved',
-      'Congratulations! Your doctor profile has been verified. You can now start accepting appointments.',
-      { doctorId: payload.doctorId },
-    );
-
-    await this.pushService.sendToUser(
-      userId.toString(),
-      'Verification Approved',
-      'Your doctor profile has been verified!',
-      { type: 'DOCTOR_VERIFIED' },
-    );
-
-    if (email) {
-      await this.mailService.sendDoctorAcceptanceEmail(email, name);
-    }
+    await Promise.all([
+      this.notificationsService.createInAppNotification(
+        userId,
+        NotificationType.DOCTOR_VERIFIED,
+        'Verification Approved',
+        'Congratulations! Your doctor profile has been verified. You can now start accepting appointments.',
+        { doctorId: payload.doctorId },
+      ),
+      this.pushService.sendToUser(
+        userId.toString(),
+        'Verification Approved',
+        'Your doctor profile has been verified!',
+        { type: 'DOCTOR_VERIFIED' },
+      ),
+      email
+        ? this.mailService.sendDoctorAcceptanceEmail(email, name)
+        : Promise.resolve(),
+    ]);
   }
 
   @OnEvent('doctor.rejected')
@@ -277,25 +282,25 @@ export class NotificationsListener {
     const { userId, email, name, note } = payload;
     this.logger.log(`Handling doctor.rejected for user ${userId}`);
 
-    await this.notificationsService.createInAppNotification(
-      userId,
-      NotificationType.DOCTOR_REJECTED,
-      'Verification Rejected',
-      note ||
-        'Your doctor profile verification was not approved. Please review your documents and try again.',
-      { doctorId: payload.doctorId },
-    );
-
-    await this.pushService.sendToUser(
-      userId.toString(),
-      'Verification Rejected',
-      'Your doctor profile verification was not approved.',
-      { type: 'DOCTOR_REJECTED' },
-    );
-
-    if (email) {
-      await this.mailService.sendDoctorRejectionEmail(email, name, note);
-    }
+    await Promise.all([
+      this.notificationsService.createInAppNotification(
+        userId,
+        NotificationType.DOCTOR_REJECTED,
+        'Verification Rejected',
+        note ||
+          'Your doctor profile verification was not approved. Please review your documents and try again.',
+        { doctorId: payload.doctorId },
+      ),
+      this.pushService.sendToUser(
+        userId.toString(),
+        'Verification Rejected',
+        'Your doctor profile verification was not approved.',
+        { type: 'DOCTOR_REJECTED' },
+      ),
+      email
+        ? this.mailService.sendDoctorRejectionEmail(email, name, note)
+        : Promise.resolve(),
+    ]);
   }
 
   @OnEvent('doctor.suspended')
@@ -303,25 +308,25 @@ export class NotificationsListener {
     const { userId, email, name, note } = payload;
     this.logger.log(`Handling doctor.suspended for user ${userId}`);
 
-    await this.notificationsService.createInAppNotification(
-      userId,
-      NotificationType.DOCTOR_SUSPENDED,
-      'Account Suspended',
-      note ||
-        'Your doctor account has been suspended. Please contact support for more information.',
-      { doctorId: payload.doctorId },
-    );
-
-    await this.pushService.sendToUser(
-      userId.toString(),
-      'Account Suspended',
-      'Your doctor account has been suspended.',
-      { type: 'DOCTOR_SUSPENDED' },
-    );
-
-    if (email) {
-      await this.mailService.sendDoctorSuspensionEmail(email, name, note);
-    }
+    await Promise.all([
+      this.notificationsService.createInAppNotification(
+        userId,
+        NotificationType.DOCTOR_SUSPENDED,
+        'Account Suspended',
+        note ||
+          'Your doctor account has been suspended. Please contact support for more information.',
+        { doctorId: payload.doctorId },
+      ),
+      this.pushService.sendToUser(
+        userId.toString(),
+        'Account Suspended',
+        'Your doctor account has been suspended.',
+        { type: 'DOCTOR_SUSPENDED' },
+      ),
+      email
+        ? this.mailService.sendDoctorSuspensionEmail(email, name, note)
+        : Promise.resolve(),
+    ]);
   }
 
   @OnEvent('doctor.unsuspended')
@@ -329,24 +334,24 @@ export class NotificationsListener {
     const { userId, email, name } = payload;
     this.logger.log(`Handling doctor.unsuspended for user ${userId}`);
 
-    await this.notificationsService.createInAppNotification(
-      userId,
-      NotificationType.DOCTOR_UNSUSPENDED,
-      'Account Restored',
-      'Your doctor account has been restored. You can now resume accepting appointments.',
-      { doctorId: payload.doctorId },
-    );
-
-    await this.pushService.sendToUser(
-      userId.toString(),
-      'Account Restored',
-      'Your doctor account has been restored!',
-      { type: 'DOCTOR_UNSUSPENDED' },
-    );
-
-    if (email) {
-      await this.mailService.sendDoctorUnsuspensionEmail(email, name);
-    }
+    await Promise.all([
+      this.notificationsService.createInAppNotification(
+        userId,
+        NotificationType.DOCTOR_UNSUSPENDED,
+        'Account Restored',
+        'Your doctor account has been restored. You can now resume accepting appointments.',
+        { doctorId: payload.doctorId },
+      ),
+      this.pushService.sendToUser(
+        userId.toString(),
+        'Account Restored',
+        'Your doctor account has been restored!',
+        { type: 'DOCTOR_UNSUSPENDED' },
+      ),
+      email
+        ? this.mailService.sendDoctorUnsuspensionEmail(email, name)
+        : Promise.resolve(),
+    ]);
   }
 
   @OnEvent('auth.registration_otp_sent')

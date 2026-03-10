@@ -18,7 +18,7 @@ export class AppointmentSchedulerService {
 
   @Cron(CronExpression.EVERY_MINUTE)
   async handleAppointmentTransitions() {
-    this.logger.debug('Running appointment status transition job...');
+    this.logger.verbose('Running appointment status transition job...');
 
     const now = new Date();
     const currentTime = this.formatTime(now);
@@ -86,8 +86,6 @@ export class AppointmentSchedulerService {
 
   @Cron(CronExpression.EVERY_30_MINUTES)
   async handleReminders() {
-    this.logger.log('Running appointment reminder check...');
-
     const now = new Date();
 
     // 6 hours from now
@@ -98,47 +96,50 @@ export class AppointmentSchedulerService {
     const oneHourLater = new Date(now.getTime() + 1 * 60 * 60 * 1000);
     const oneHourWindow = new Date(oneHourLater.getTime() + 10 * 60 * 1000); // +10 min window
 
-    // Find appointments for 6h reminder
-    const sixHourAppointments = await this.findAppointmentsInWindow(
-      sixHoursLater,
-      sixHoursWindow,
-      'reminder6hSent',
-    );
+    // Find both windows concurrently
+    const [sixHourAppointments, oneHourAppointments] = await Promise.all([
+      this.findAppointmentsInWindow(
+        sixHoursLater,
+        sixHoursWindow,
+        'reminder6hSent',
+      ),
+      this.findAppointmentsInWindow(
+        oneHourLater,
+        oneHourWindow,
+        'reminder1hSent',
+      ),
+    ]);
 
-    for (const appointment of sixHourAppointments) {
-      this.notificationsService.emit('appointment.reminder', {
-        appointment,
-        type: '6H',
-      });
-
-      await this.appointmentModel.findByIdAndUpdate(appointment._id, {
-        reminder6hSent: true,
-      });
-    }
-
+    // Process 6h reminders
     if (sixHourAppointments.length > 0) {
+      // Emit all events first (fire-and-forget style)
+      for (const appointment of sixHourAppointments) {
+        this.notificationsService.emit('appointment.reminder', {
+          appointment,
+          type: '6H',
+        });
+      }
+      // One bulk write instead of N individual writes
+      await this.appointmentModel.updateMany(
+        { _id: { $in: sixHourAppointments.map((a) => a._id) } },
+        { $set: { reminder6hSent: true } },
+      );
       this.logger.log(`Sent ${sixHourAppointments.length} 6-hour reminders`);
     }
 
-    // Find appointments for 1h reminder
-    const oneHourAppointments = await this.findAppointmentsInWindow(
-      oneHourLater,
-      oneHourWindow,
-      'reminder1hSent',
-    );
-
-    for (const appointment of oneHourAppointments) {
-      this.notificationsService.emit('appointment.reminder', {
-        appointment,
-        type: '1H',
-      });
-
-      await this.appointmentModel.findByIdAndUpdate(appointment._id, {
-        reminder1hSent: true,
-      });
-    }
-
+    // Process 1h reminders
     if (oneHourAppointments.length > 0) {
+      for (const appointment of oneHourAppointments) {
+        this.notificationsService.emit('appointment.reminder', {
+          appointment,
+          type: '1H',
+        });
+      }
+      // One bulk write instead of N individual writes
+      await this.appointmentModel.updateMany(
+        { _id: { $in: oneHourAppointments.map((a) => a._id) } },
+        { $set: { reminder1hSent: true } },
+      );
       this.logger.log(`Sent ${oneHourAppointments.length} 1-hour reminders`);
     }
   }
@@ -177,4 +178,3 @@ export class AppointmentSchedulerService {
     });
   }
 }
-

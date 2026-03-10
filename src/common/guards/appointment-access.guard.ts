@@ -44,25 +44,12 @@ export class AppointmentAccessGuard implements CanActivate {
         .findOne({ userId: user.userId })
         .lean();
 
-      console.log('--- Appointment Access Debug ---');
-      console.log('User ID from Token:', user.userId);
-      console.log('Appointment Doctor ID:', appointment.doctorId.toString());
-      if (doctorProfile) {
-        console.log('Found Doctor Profile ID:', doctorProfile._id.toString());
-      } else {
-        console.log('No Doctor Profile found for this User ID');
-      }
-
       if (
         doctorProfile &&
         appointment.doctorId.toString() === doctorProfile._id.toString()
       ) {
         isDoctor = true;
-        console.log('Match Found: Access Granted for Doctor');
-      } else {
-        console.log('Match Failed: Access Denied for Doctor');
       }
-      console.log('--------------------------------');
     }
 
     if (!isPatient && !isDoctor && user.role !== Role.ADMIN) {
