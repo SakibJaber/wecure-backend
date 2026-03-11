@@ -1,9 +1,10 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from 'src/common/enum/role.enum';
 import { DashboardService } from './dashboard.service';
+import { DashboardQueryDto } from './dto/dashboard-query.dto';
 
 @Controller('admin/dashboard')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -12,9 +13,9 @@ export class DashboardController {
 
   @Get()
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-  async getDashboardStats() {
+  async getDashboardStats(@Query() query: DashboardQueryDto) {
     try {
-      const data = await this.dashboardService.getAdminDashboardStats();
+      const data = await this.dashboardService.getAdminDashboardStats(query);
       return {
         success: true,
         statusCode: 200,

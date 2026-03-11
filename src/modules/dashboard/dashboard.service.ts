@@ -10,6 +10,7 @@ import {
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import { Role } from 'src/common/enum/role.enum';
 import { AppointmentStatus } from 'src/common/enum/appointment-status.enum';
+import { DashboardQueryDto } from './dto/dashboard-query.dto';
 
 @Injectable()
 export class DashboardService {
@@ -21,19 +22,31 @@ export class DashboardService {
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
   ) {}
 
-  async getAdminDashboardStats(): Promise<any> {
+  async getAdminDashboardStats(filter: DashboardQueryDto): Promise<any> {
     const currentYear = new Date().getFullYear();
+    const targetYear = filter.year || currentYear;
+    const targetMonth = filter.month;
 
-    // 1. Total Patients & Doctors
+    // 1. Total Patients & Doctors (Lifetime)
     const [totalPatients, totalDoctors] = await Promise.all([
       this.userModel.countDocuments({ role: Role.USER }),
       this.doctorModel.countDocuments(),
     ]);
 
-    // 2. Appointment Stats
-    // Status can be: PENDING, CONFIRMED, CANCELLED, COMPLETED, RESCHEDULED, IN_PROGRESS, REJECTED
-    // Let's map "Total Request" to PENDING, "Complete" to COMPLETED, "Canceled" to CANCELLED.
+    // 2. Appointment Stats Filtered by Year/Month
+    const appointmentMatch: any = {};
+    if (targetMonth) {
+      const startOfMonth = new Date(targetYear, targetMonth - 1, 1);
+      const endOfMonth = new Date(targetYear, targetMonth, 1);
+      appointmentMatch.createdAt = { $gte: startOfMonth, $lt: endOfMonth };
+    } else {
+      const startOfYear = new Date(targetYear, 0, 1);
+      const endOfYear = new Date(targetYear + 1, 0, 1);
+      appointmentMatch.createdAt = { $gte: startOfYear, $lt: endOfYear };
+    }
+
     const appointmentStats = await this.appointmentModel.aggregate([
+      { $match: appointmentMatch },
       {
         $group: {
           _id: '$status',
@@ -54,20 +67,20 @@ export class DashboardService {
         canceledAppointments += stat.count;
     });
 
-    const totalAppointments = await this.appointmentModel.countDocuments();
+    const totalAppointments =
+      await this.appointmentModel.countDocuments(appointmentMatch);
 
-    // 3. Revenue
-    // Revenue Activity for the current year, grouped by month
-    const startOfYear = new Date(currentYear, 0, 1);
-    const endOfYear = new Date(currentYear + 1, 0, 1);
+    // 3. Revenue Activity for the target year
+    const startOfYearForRevenue = new Date(targetYear, 0, 1);
+    const endOfYearForRevenue = new Date(targetYear + 1, 0, 1);
 
     const revenuePipeline = await this.paymentModel.aggregate([
       {
         $match: {
           status: 'PAID',
           createdAt: {
-            $gte: startOfYear,
-            $lt: endOfYear,
+            $gte: startOfYearForRevenue,
+            $lt: endOfYearForRevenue,
           },
         },
       },
@@ -100,7 +113,7 @@ export class DashboardService {
         completeConsultations,
       },
       revenueActivity: {
-        year: currentYear,
+        year: targetYear,
         monthly: monthlyRevenueRaw,
       },
       revenue: totalRevenue,
@@ -108,7 +121,6 @@ export class DashboardService {
         totalRequests, // e.g., PENDING
         completed: completeConsultations,
         canceled: canceledAppointments,
-        // We can add "other" for confirmed, etc if necessary, but UI just shows Request, Complete, Canceled
       },
     };
   }
