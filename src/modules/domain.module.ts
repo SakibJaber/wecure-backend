@@ -22,6 +22,7 @@ import { AgoraModule } from 'src/modules/agora/agora.module';
 import { RefundsModule } from './refunds/refunds.module';
 import { PayoutsModule } from './payouts/payouts.module';
 import { FirebaseModule } from './firebase/firebase.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { FirebaseModule } from './firebase/firebase.module';
     RefundsModule,
     PayoutsModule,
     FirebaseModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
